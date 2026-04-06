@@ -1,0 +1,17 @@
+# Python dependencies
+pyspark
+xgboost
+xgbse
+fastapi
+uvicorn
+pandas
+pyarrow
+scikit-learn
+numpy
+lifelines
+shap
+matplotlib
+seaborn
+jupyterlab
+python-dotenv
+httpx
