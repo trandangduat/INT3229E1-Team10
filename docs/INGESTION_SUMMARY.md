@@ -36,34 +36,65 @@
 *   **Tối ưu:** Đã áp dụng `StructType` cứng (explicit schema) thay vì `inferSchema=True` để ngăn chặn OOM khi chạy file lớn.
 *   **Output:** Đã xuất thành công file định dạng `.snappy.parquet` vào thư mục `data/bronze/mimic_iv/chartevents/`.
 
+### 2.5. Hoàn thiện Script Ingestion Local cho MIMIC-IV và eICU
+*   **Script đã tạo:**
+    *   `src/ingestion/ingest_mimic.py`
+    *   `src/ingestion/ingest_eicu.py`
+    *   `src/ingestion/ingest_notes.py` (đã chuẩn bị code, chờ cập nhật dữ liệu MIMIC-IV-Note để test)
+*   **Quyết định kiến trúc:** Bronze layer giữ dữ liệu hoàn toàn raw. Không rename cột, không cast kiểu dữ liệu, không filter, không drop null. Việc chuẩn hóa schema giữa MIMIC-IV và eICU sẽ chuyển sang Silver layer.
+*   **Cách đọc CSV:** Dùng `header=True` và `inferSchema=False`. PySpark sẽ lấy tên cột từ header của file CSV và đọc toàn bộ giá trị dưới dạng string, tránh việc Spark scan file lớn để đoán schema.
+*   **Cách ghi output:** Luôn ghi `Parquet` với nén `Snappy` bằng `df.write.parquet(path, mode="overwrite", compression="snappy")`.
+*   **Hỗ trợ môi trường:** Các script nhận tham số dòng lệnh `local` hoặc `hdfs`:
+    *   `local`: chạy trong Docker với dữ liệu sample tại `/home/jovyan/data/raw`.
+    *   `hdfs`: chạy production trên cluster với dữ liệu tại `hdfs://master10:9000/data/raw_data/...`.
+
+### 2.6. Local Validation bằng Docker Spark
+*   **Môi trường chạy:** Docker container `predictcare-spark-dev`, image `jupyter/pyspark-notebook:spark-3.4.1`.
+*   **Lệnh chạy đúng:** Phải dùng `spark-submit`, không dùng `python` trực tiếp vì `python` trong container báo lỗi `ModuleNotFoundError: No module named 'pyspark'`.
+*   **Lệnh đã dùng để chạy MIMIC-IV:**
+    ```bash
+    sudo docker exec predictcare-spark-dev spark-submit /home/jovyan/src/ingestion/ingest_mimic.py local
+    ```
+*   **Kết quả MIMIC-IV:** Chạy thành công với dữ liệu sample, output đã được ghi vào `data/bronze/mimic_iv/`.
+*   **Lệnh đã dùng để chạy eICU:**
+    ```bash
+    sudo docker exec predictcare-spark-dev spark-submit /home/jovyan/src/ingestion/ingest_eicu.py local
+    ```
+*   **Kết quả eICU:** Chạy thành công với dữ liệu sample, output đã được ghi vào:
+    *   `data/bronze/eicu/patient/`
+    *   `data/bronze/eicu/vitalPeriodic/`
+    *   `data/bronze/eicu/diagnosis/`
+    *   `data/bronze/eicu/medication/`
+*   **Lưu ý permission:** Nếu output được tạo bởi user `root` khi dùng `docker exec`, có thể cần chạy `sudo chmod -R 777 data/` trước khi ghi đè lại dữ liệu.
+
 ---
 
-## 3. KẾ HOẠCH LÀM VIỆC TIẾP THEO (NEXT STEPS CHO AI AGENT)
+## 3. KẾ HOẠCH LÀM VIỆC TIẾP THEO (NEXT STEPS)
 
 Dưới đây là các tác vụ mà AI Agent và tôi cần tiếp tục triển khai:
 
 ### TÁC VỤ 1: Hoàn thiện Script Ingestion cho toàn bộ bảng MIMIC-IV
-*   **Mục tiêu:** Chuyển đổi notebook hiện tại thành file Python chuẩn (`src/ingestion/ingest_mimic.py`).
-*   **Nhiệm vụ:**
-    *   Định nghĩa `StructType` cứng cho các bảng còn lại: `admissions`, `patients`, `diagnoses_icd`, `labevents`, `d_items`.
-    *   Viết logic vòng lặp hoặc cấu trúc hàm để đọc từng file CSV tương ứng trong `data/raw/` và ghi ra `data/bronze/mimic_iv/<table_name>/`.
+*   **Trạng thái:** Đã hoàn thành local validation.
+*   **Kết quả:** Đã tạo `src/ingestion/ingest_mimic.py`, chạy thành công bằng Docker Spark với sample data và ghi output Parquet+Snappy vào `data/bronze/mimic_iv/`.
+*   **Ghi chú:** Script không dùng `StructType` ép kiểu dữ liệu tại Bronze. Dữ liệu được giữ raw bằng cách đọc toàn bộ cột dưới dạng string với `inferSchema=False`.
 
-### TÁC VỤ 2: Xây dựng Script Ingestion cho eICU (Có ánh xạ Schema)
-*   **Mục tiêu:** Tạo script `src/ingestion/ingest_eicu.py`.
-*   **Nhiệm vụ:**
-    *   Đọc các bảng eICU (`patient`, `vitalPeriodic`, `diagnosis`, `medication`).
-    *   **Lưu ý:** Design Spec yêu cầu đổi tên cột (Rename) và ép kiểu để tương thích với MIMIC-IV ngay từ khâu lưu vào Bronze (ví dụ: `systemicSystolic` -> `sbp`). Tuy nhiên, cần cân nhắc kỹ: Nguyên tắc Medallion thường đẩy việc rename này sang Silver Layer. *Cần review lại logic này.*
+### TÁC VỤ 2: Xây dựng Script Ingestion cho eICU
+*   **Trạng thái:** Đã hoàn thành local validation.
+*   **Kết quả:** Đã tạo `src/ingestion/ingest_eicu.py`, chạy thành công bằng Docker Spark với sample data và ghi output Parquet+Snappy vào `data/bronze/eicu/`.
+*   **Quyết định:** Không ánh xạ schema, không rename, không cast tại Bronze. Các thao tác như `systemicSystolic` -> `sbp` sẽ thực hiện ở Silver layer.
 
 ### TÁC VỤ 3: Xử lý file Text đa dòng của MIMIC-IV-Note
-*   **Mục tiêu:** Tạo script `src/ingestion/ingest_notes.py` để xử lý file `discharge.csv`.
-*   **Nhiệm vụ cốt lõi:** Cấu hình PySpark CSV Reader với tùy chọn `multiLine=True` và `escape="\""` để không bị vỡ dòng do các ký tự `\n` nằm lẫn bên trong ghi chú lâm sàng của bác sĩ.
+*   **Trạng thái:** Pending data sample.
+*   **Đã chuẩn bị:** Đã tạo `src/ingestion/ingest_notes.py` với cấu hình PySpark CSV Reader `multiLine=True` và `escape='"'` để tránh vỡ dòng khi đọc ghi chú lâm sàng nhiều dòng.
+*   **Cần làm tiếp:** Chờ cập nhật dữ liệu MIMIC-IV-Note (`discharge.csv`) để chạy local validation.
 
 ### TÁC VỤ 4: Scale Up lên GCP Production (Máy ảo `bigdata2`)
+*   **Trạng thái:** Chưa thực hiện.
 *   **Mục tiêu:** Triển khai code đã test lên cluster thật.
 *   **Nhiệm vụ:**
-    1. Đổi toàn bộ đường dẫn I/O trong các file `.py` từ Local File System (`/home/jovyan/data/...`) sang HDFS URI (`hdfs://master10:9000/data/raw_data/...`).
-    2. Gỡ bỏ dòng `.master("local[*]")` trong phần cấu hình SparkSession.
-    3. Đưa file `.py` lên máy ảo và chạy bằng lệnh `spark-submit`.
+    1. Đưa các file `.py` trong `src/ingestion/` lên VM.
+    2. Chạy production bằng `spark-submit ... hdfs` để đọc dữ liệu từ HDFS và ghi vào Bronze HDFS.
+    3. Verify output bằng `hdfs dfs -ls data/bronze/...` và đọc lại Parquet bằng Spark.
 
 ---
 
