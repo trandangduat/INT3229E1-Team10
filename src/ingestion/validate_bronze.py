@@ -16,8 +16,9 @@ class TableSpec:
 
 def path_exists(spark, path):
     hadoop_conf = spark.sparkContext._jsc.hadoopConfiguration()
-    fs = spark.sparkContext._jvm.org.apache.hadoop.fs.FileSystem.get(hadoop_conf)
-    return fs.exists(spark.sparkContext._jvm.org.apache.hadoop.fs.Path(path))
+    hadoop_path = spark.sparkContext._jvm.org.apache.hadoop.fs.Path(path)
+    fs = hadoop_path.getFileSystem(hadoop_conf)
+    return fs.exists(hadoop_path)
 
 
 def read_raw_csv(spark, path, multiline=False):
