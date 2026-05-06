@@ -46,7 +46,7 @@
 *   **Cách ghi output:** Luôn ghi `Parquet` với nén `Snappy` bằng `df.write.parquet(path, mode="overwrite", compression="snappy")`.
 *   **Hỗ trợ môi trường:** Các script nhận tham số dòng lệnh `local` hoặc `hdfs`:
     *   `local`: chạy trong Docker với dữ liệu sample tại `/home/jovyan/data/raw`.
-    *   `hdfs`: chạy production trên cluster với dữ liệu tại `hdfs://master10:9000/data/raw_data/...`.
+    *   `hdfs`: chạy production trên cluster với dữ liệu tại `hdfs://master10:9000/user/dis/data/raw_data/...`.
 
 ### 2.6. Local Validation bằng Docker Spark
 *   **Môi trường chạy:** Docker container `predictcare-spark-dev`, image `jupyter/pyspark-notebook:spark-3.4.1`.
@@ -67,6 +67,22 @@
     *   `data/bronze/eicu/medication/`
 *   **Lưu ý permission:** Nếu output được tạo bởi user `root` khi dùng `docker exec`, có thể cần chạy `sudo chmod -R 777 data/` trước khi ghi đè lại dữ liệu.
 
+### 2.7. Production Ingestion và Validation trên VM/HDFS
+*   **Môi trường chạy:** VM instance `bigdata2` kết nối HDFS `hdfs://master10:9000/user/dis/data`.
+*   **Script validation đã tạo:** `src/ingestion/validate_bronze.py`.
+*   **Mục tiêu validation:** So sánh raw CSV với Bronze Parquet để đảm bảo ingestion không mất dữ liệu.
+*   **Validation checks:**
+    *   Raw CSV path tồn tại.
+    *   Bronze Parquet path tồn tại.
+    *   Output có `_SUCCESS`.
+    *   `raw_rows == bronze_rows`.
+    *   Header columns raw CSV khớp với columns trong Bronze Parquet.
+    *   Bronze columns đều là `string`, đúng nguyên tắc raw Bronze.
+*   **Kết quả MIMIC-IV:** Đã chạy production ingestion và validate thành công trên HDFS cho các bảng MIMIC-IV đã xử lý, bao gồm cả bảng lớn `chartevents`.
+*   **Kết quả eICU:** Đã chạy production ingestion và validate thành công trên HDFS cho các bảng `patient`, `vitalPeriodic`, `diagnosis`, `medication`.
+*   **Trạng thái MIMIC-IV-Note:** Chưa xử lý production ingestion/validation vì dữ liệu `discharge.csv` sẽ được cập nhật sau.
+*   **Base path chuẩn:** Tất cả production data dùng base path `hdfs://master10:9000/user/dis/data`.
+
 ---
 
 ## 3. KẾ HOẠCH LÀM VIỆC TIẾP THEO (NEXT STEPS)
@@ -74,13 +90,13 @@
 Dưới đây là các tác vụ mà AI Agent và tôi cần tiếp tục triển khai:
 
 ### TÁC VỤ 1: Hoàn thiện Script Ingestion cho toàn bộ bảng MIMIC-IV
-*   **Trạng thái:** Đã hoàn thành local validation.
-*   **Kết quả:** Đã tạo `src/ingestion/ingest_mimic.py`, chạy thành công bằng Docker Spark với sample data và ghi output Parquet+Snappy vào `data/bronze/mimic_iv/`.
+*   **Trạng thái:** Đã hoàn thành production ingestion và validation trên VM/HDFS.
+*   **Kết quả:** Đã tạo `src/ingestion/ingest_mimic.py`, chạy thành công bằng Docker Spark với sample data, sau đó chạy production trên VM và validate thành công output Parquet+Snappy tại `hdfs://master10:9000/user/dis/data/bronze/mimic_iv/`.
 *   **Ghi chú:** Script không dùng `StructType` ép kiểu dữ liệu tại Bronze. Dữ liệu được giữ raw bằng cách đọc toàn bộ cột dưới dạng string với `inferSchema=False`.
 
 ### TÁC VỤ 2: Xây dựng Script Ingestion cho eICU
-*   **Trạng thái:** Đã hoàn thành local validation.
-*   **Kết quả:** Đã tạo `src/ingestion/ingest_eicu.py`, chạy thành công bằng Docker Spark với sample data và ghi output Parquet+Snappy vào `data/bronze/eicu/`.
+*   **Trạng thái:** Đã hoàn thành production ingestion và validation trên VM/HDFS.
+*   **Kết quả:** Đã tạo `src/ingestion/ingest_eicu.py`, chạy thành công bằng Docker Spark với sample data, sau đó chạy production trên VM và validate thành công output Parquet+Snappy tại `hdfs://master10:9000/user/dis/data/bronze/eicu/`.
 *   **Quyết định:** Không ánh xạ schema, không rename, không cast tại Bronze. Các thao tác như `systemicSystolic` -> `sbp` sẽ thực hiện ở Silver layer.
 
 ### TÁC VỤ 3: Xử lý file Text đa dòng của MIMIC-IV-Note
@@ -89,12 +105,9 @@ Dưới đây là các tác vụ mà AI Agent và tôi cần tiếp tục triể
 *   **Cần làm tiếp:** Chờ cập nhật dữ liệu MIMIC-IV-Note (`discharge.csv`) để chạy local validation.
 
 ### TÁC VỤ 4: Scale Up lên GCP Production (Máy ảo `bigdata2`)
-*   **Trạng thái:** Chưa thực hiện.
-*   **Mục tiêu:** Triển khai code đã test lên cluster thật.
-*   **Nhiệm vụ:**
-    1. Đưa các file `.py` trong `src/ingestion/` lên VM.
-    2. Chạy production bằng `spark-submit ... hdfs` để đọc dữ liệu từ HDFS và ghi vào Bronze HDFS.
-    3. Verify output bằng `hdfs dfs -ls data/bronze/...` và đọc lại Parquet bằng Spark.
+*   **Trạng thái:** Đã thực hiện cho MIMIC-IV và eICU.
+*   **Kết quả:** Production Bronze output đã được ghi và validate tại `hdfs://master10:9000/user/dis/data/bronze/`.
+*   **Còn lại:** MIMIC-IV-Note (`discharge.csv`) sẽ được chạy production ingestion và validation sau khi dữ liệu được cập nhật.
 
 ---
 
