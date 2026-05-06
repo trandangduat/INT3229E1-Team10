@@ -1,4 +1,5 @@
 import sys
+
 from pyspark.sql import SparkSession
 
 
@@ -15,8 +16,8 @@ def main():
         base_input_path = "data/raw"
         base_output_path = "data/bronze/eicu"
     else:
-        base_input_path = "hdfs://master10:9000/data/raw_data/eICU"
-        base_output_path = "hdfs://master10:9000/data/bronze/eicu"
+        base_input_path = "hdfs://master10:9000/user/dis/data/raw_data/eICU"
+        base_output_path = "hdfs://master10:9000/user/dis/data/bronze/eicu"
 
     print(f"Running in {env} mode.")
     print(f"Input base path: {base_input_path}")

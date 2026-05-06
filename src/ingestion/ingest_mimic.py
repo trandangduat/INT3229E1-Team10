@@ -1,4 +1,5 @@
 import sys
+
 from pyspark.sql import SparkSession
 
 
@@ -18,8 +19,8 @@ def main():
         base_output_path = "data/bronze/mimic_iv"
     else:
         # Đường dẫn HDFS theo log bạn cung cấp
-        base_input_path = "hdfs://master10:9000/data/raw_data/mimic"
-        base_output_path = "hdfs://master10:9000/data/bronze/mimic_iv"
+        base_input_path = "hdfs://master10:9000/user/dis/data/raw_data/mimic"
+        base_output_path = "hdfs://master10:9000/user/dis/data/bronze/mimic_iv"
 
     print(f"Running in {env} mode.")
     print(f"Input base path: {base_input_path}")
