@@ -1,0 +1,16 @@
+services:
+  local-spark:
+    # Sử dụng tag chứa sẵn Spark 3.4.x tương thích với VM của bạn
+    image: jupyter/pyspark-notebook:spark-3.4.1
+    container_name: predictcare-spark-dev
+    user: root # Cấp quyền root để tránh lỗi permission khi mount thư mục
+    environment:
+      - CHOWN_HOME=yes
+      - CHOWN_HOME_OPTS=-R
+    ports:
+      - "8888:8888" # Cổng cho giao diện web JupyterLab
+      - "4040:4040" # Cổng cho Spark UI để theo dõi job
+    volumes:
+      - ./data:/home/jovyan/data # Mount thư mục data
+      - ./src:/home/jovyan/src # Mount thư mục code
+    command: "start-notebook.sh --NotebookApp.token=''" # Tắt mật khẩu để vào thẳng cho tiện
