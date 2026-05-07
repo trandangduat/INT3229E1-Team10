@@ -148,11 +148,24 @@ def has_parquet_files(spark, path):
     fs = hadoop_path.getFileSystem(hadoop_conf)
     if not fs.exists(hadoop_path):
         return False
-    statuses = fs.listStatus(hadoop_path)
+    return _has_parquet_recursive(fs, hadoop_path)
+
+
+def _has_parquet_recursive(fs, path):
+    if not fs.exists(path):
+        return False
+    statuses = fs.listStatus(path)
     for status in statuses:
         name = status.getPath().getName()
         if name.endswith(".parquet") or name.endswith(".snappy.parquet"):
             return True
+        if (
+            status.isDirectory()
+            and not name.startswith("_")
+            and not name.startswith(".")
+        ):
+            if _has_parquet_recursive(fs, status.getPath()):
+                return True
     return False
 
 
@@ -475,12 +488,22 @@ def main():
     # STEP 7: Add temporal split column
     # ──────────────────────────────────────────────
     print("\n[STEP 7] Adding temporal split column...")
+
+    year_bounds = df.filter(col("admityear").isNotNull()).approxQuantile(
+        "admityear", [0.70, 0.85], 0.001
+    )
+    train_max = int(year_bounds[0])
+    val_max = int(year_bounds[1])
+    print(
+        f"[METRIC] Temporal split boundaries: train ≤ {train_max}, val ≤ {val_max}, test > {val_max}"
+    )
+
     df = df.withColumn(
         "split",
-        when(col("admityear") < 2019, "train")
-        .when(col("admityear") == 2019, "val")
-        .when(col("admityear").isNotNull(), "test")
-        .otherwise("test_external"),
+        when(col("admityear").isNull(), "test_external")
+        .when(col("admityear") <= train_max, "train")
+        .when(col("admityear") <= val_max, "val")
+        .otherwise("test"),
     )
 
     split_dist = df.groupBy("split").count().orderBy("split")
