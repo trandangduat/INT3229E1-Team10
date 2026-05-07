@@ -6,12 +6,15 @@ from pyspark.sql.functions import (
     col,
     count,
     datediff,
+    lag,
     max,
     min,
     sum,
     to_timestamp,
+    when,
     year,
 )
+from pyspark.sql.window import Window
 
 
 def main():
@@ -91,7 +94,7 @@ def main():
     )
 
     print("[INFO] Applying clinical filters (age >= 18, duration_days >= 1)...")
-    df_silver = df_transformed.filter(
+    df_filtered = df_transformed.filter(
         col("subject_id").isNotNull()
         & col("hadm_id").isNotNull()
         & col("admittime").isNotNull()
@@ -101,6 +104,30 @@ def main():
         & (col("duration_days") >= 1)
     )
 
+    print("[INFO] Computing 30-day readmission flag...")
+    patient_window = Window.partitionBy("subject_id").orderBy("admittime")
+    df_with_next = (
+        df_filtered.withColumn(
+            "next_admittime", lag("admittime", -1).over(patient_window)
+        )
+        .withColumn(
+            "days_to_readmission",
+            datediff(col("next_admittime"), col("dischtime")),
+        )
+        .withColumn(
+            "event_flag_readmission",
+            when(
+                col("days_to_readmission").isNotNull()
+                & (col("days_to_readmission") >= 0)
+                & (col("days_to_readmission") <= 30),
+                1,
+            ).otherwise(0),
+        )
+        .drop("next_admittime", "days_to_readmission")
+    )
+
+    df_silver = df_with_next
+
     final_count = df_silver.count()
     print(f"[METRIC] Final Silver admissions count: {final_count}")
 
@@ -108,6 +135,10 @@ def main():
     avg_mort = df_silver.agg(avg(col("event_flag_mortality"))).collect()[0][0]
     mortality_rate = (avg_mort or 0.0) * 100
     print(f"[METRIC] Mortality Rate: {mortality_rate:.2f}%")
+
+    avg_readm = df_silver.agg(avg(col("event_flag_readmission"))).collect()[0][0]
+    readmission_rate = (avg_readm or 0.0) * 100
+    print(f"[METRIC] 30-day Readmission Rate: {readmission_rate:.2f}%")
 
     duration_stats = df_silver.agg(
         min(col("duration_days")).alias("min_days"),
