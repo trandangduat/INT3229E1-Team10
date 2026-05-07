@@ -103,7 +103,7 @@ Dưới đây là trạng thái các tác vụ Bronze Layer sau khi chạy produ
 
 ### TÁC VỤ 3: Xử lý file Text đa dòng của MIMIC-IV-Note
 *   **Trạng thái:** Đã hoàn thành production ingestion và validation trên VM/HDFS.
-*   **Kết quả:** Đã tạo `src/ingestion/ingest_notes.py` với cấu hình PySpark CSV Reader `multiLine=True` và `escape='"'` để tránh vỡ dòng khi đọc ghi chú lâm sàng nhiều dòng; output Parquet+Snappy đã được ghi và validate thành công tại `hdfs://master10:9000/user/dis/data/bronze/mimic_note/`.
+*   **Kết quả:** Đã tạo `src/ingestion/ingest_notes.py` với cấu hình PySpark CSV Reader `multiLine=True` và `escape='"'` để tránh vỡ dòng khi đọc ghi chú lâm sàng nhiều dòng; output Parquet+Snappy đã được ghi và validate thành công tại `hdfs://master10:9000/user/dis/data/bronze/mimic_iv_note/discharge/`.
 
 ### TÁC VỤ 4: Scale Up lên GCP Production (Máy ảo `bigdata2`)
 *   **Trạng thái:** Đã hoàn thành cho MIMIC-IV, eICU và MIMIC-IV-Note.

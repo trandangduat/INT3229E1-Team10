@@ -34,6 +34,7 @@ def main():
         {"name": "labevents", "path": "hosp/labevents.csv"},
         {"name": "d_items", "path": "icu/d_items.csv"},
         {"name": "chartevents", "path": "icu/chartevents.csv"},
+        {"name": "d_labitems", "path": "hosp/d_labitems.csv"},
     ]
 
     for table in tables:

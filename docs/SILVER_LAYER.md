@@ -2,7 +2,7 @@
 **Dự án:** PREDICTCARE AI - CDSS Dashboard (Team 10)
 **Vai trò:** Big Data Engineering - Distributed ETL & Feature Engineering
 **Phạm vi:** Bronze -> Silver transformation sau khi production ingestion hoàn tất
-**Trạng thái hiện tại:** MIMIC-IV và eICU đã hoàn tất production Bronze ingestion + validation trên VM/HDFS. MIMIC-IV-Note đang pending.
+**Trạng thái hiện tại:** MIMIC-IV, eICU và MIMIC-IV-Note đã hoàn tất production Bronze ingestion + validation trên VM/HDFS. Bronze validation PASS cho 11 bảng.
 
 ---
 
@@ -47,7 +47,7 @@ hdfs://master10:9000/user/dis/data/bronze/eicu/diagnosis/
 hdfs://master10:9000/user/dis/data/bronze/eicu/medication/
 ```
 
-MIMIC-IV-Note sẽ bổ sung sau khi xử lý `discharge.csv`:
+MIMIC-IV-Note đã được xử lý trong Bronze:
 
 ```text
 hdfs://master10:9000/user/dis/data/bronze/mimic_iv_note/discharge/
@@ -75,7 +75,7 @@ hdfs://master10:9000/user/dis/data/silver/note_embeddings/
 
 Mục tiêu: xác nhận production Bronze đã chạy đúng trước khi transform sang Silver.
 
-Trạng thái hiện tại: Đã hoàn thành cho MIMIC-IV và eICU. Còn pending MIMIC-IV-Note.
+Trạng thái hiện tại: Đã hoàn thành cho MIMIC-IV, eICU và MIMIC-IV-Note.
 
 Script đã tạo:
 
@@ -96,7 +96,7 @@ Kết quả đã đạt:
 
 *   MIMIC-IV production Bronze validation: PASS cho các bảng đã ingest, bao gồm `chartevents`.
 *   eICU production Bronze validation: PASS cho `patient`, `vitalPeriodic`, `diagnosis`, `medication`.
-*   MIMIC-IV-Note validation: pending do chưa cập nhật dữ liệu `discharge.csv`.
+*   MIMIC-IV-Note validation: PASS cho dữ liệu note, bao gồm `discharge.csv`.
 
 Lý do cần làm trước Silver:
 
@@ -113,6 +113,28 @@ Script đề xuất:
 
 ```text
 src/etl/silver_admissions.py
+```
+
+Trạng thái triển khai:
+
+*   Đã tạo script `src/etl/silver_admissions.py`.
+*   Script hỗ trợ tham số `local` và `hdfs`.
+*   Đã bổ sung metrics input count, invalid cast count, join count, final count, mortality rate, duration stats, missing mortality và distribution theo `admityear`.
+*   Đã kiểm tra cú pháp bằng `python3 -m py_compile src/etl/silver_admissions.py`.
+*   Đã chạy local Spark bằng Docker thành công.
+*   Local validation metrics: raw admissions `99`, raw patients `99`, invalid required casts `0`, join count `99`, final Silver admissions `87`, mortality rate `1.15%`, duration min/max/avg `1/18/3.51`, missing mortality `0/87`.
+*   Local output đã ghi tại `data/silver/admissions/` với `_SUCCESS` và partition `admityear=*`.
+
+Lệnh chạy local qua Docker:
+
+```bash
+sudo docker exec predictcare-spark-dev spark-submit /home/jovyan/src/etl/silver_admissions.py local
+```
+
+Lệnh chạy production trên VM/HDFS:
+
+```bash
+spark-submit src/etl/silver_admissions.py hdfs
 ```
 
 Input:
@@ -171,6 +193,29 @@ Script đề xuất:
 
 ```text
 src/etl/silver_vitals_mimic.py
+```
+
+Trạng thái triển khai:
+
+*   Đã tự xác nhận `itemid` từ Bronze `d_items` local cho các vital có trong sample: SBP `220050`, `220179`; SpO2 `220277`; HR `220045`.
+*   Temperature chưa triển khai vì Bronze `d_items` sample local không chứa itemid nhiệt độ; cần xác nhận từ full VM/HDFS `d_items` hoặc bạn cung cấp itemid.
+*   Đã tạo script `src/etl/silver_vitals_mimic.py` cho SBP, SpO2 và HR trong 24h đầu admission.
+*   Script hỗ trợ tham số `local` và `hdfs`.
+*   Đã kiểm tra cú pháp bằng `python3 -m py_compile src/etl/silver_vitals_mimic.py`.
+*   Đã chạy local Spark bằng Docker thành công.
+*   Local validation metrics: raw chartevents `10000`, rows sau vital itemid filter `594`, HR `200`, SBP `198`, SpO2 `196`, rows trong 24h đầu `143`, admissions có 24h vitals `4`, missing SBP/SpO2/HR `0/4`.
+*   Local output đã ghi tại `data/silver/chartevents_agg/` với `_SUCCESS` và partition `admityear=*`.
+
+Lệnh chạy local qua Docker:
+
+```bash
+sudo docker exec predictcare-spark-dev spark-submit /home/jovyan/src/etl/silver_vitals_mimic.py local
+```
+
+Lệnh chạy production trên VM/HDFS:
+
+```bash
+spark-submit src/etl/silver_vitals_mimic.py hdfs
 ```
 
 Input:
@@ -240,8 +285,8 @@ Validation metrics:
 
 Điểm cần xác nhận trước khi code:
 
-*   Danh sách `itemid` cuối cùng cho SBP, SpO2, HR/PR, Temperature trong MIMIC-IV v3.1.
-*   Có lấy cả invasive/non-invasive SBP hay chỉ một loại.
+*   Temperature MIMIC itemid cần xác nhận trên full VM/HDFS `d_items` vì sample local không chứa candidate nhiệt độ.
+*   SBP đã lấy cả invasive và non-invasive: `220050`, `220179`.
 
 ---
 
@@ -287,8 +332,8 @@ Validation metrics:
 
 Điểm cần xác nhận trước khi code:
 
-*   Danh sách lab itemid cần dùng.
-*   Window feature: 24h đầu hay toàn admission.
+*   Cần bổ sung Bronze `mimic_iv/d_labitems` để tự xác nhận mapping lab itemid -> feature name từ dữ liệu thực tế.
+*   Window feature đã chốt: aggregate lab trong 24h đầu admission, đồng nhất với vitals và giảm leakage.
 
 ---
 
@@ -300,6 +345,29 @@ Script đề xuất:
 
 ```text
 src/etl/silver_diagnoses.py
+```
+
+Trạng thái triển khai:
+
+*   Đã tạo script `src/etl/silver_diagnoses.py`.
+*   Script hỗ trợ tham số `local` và `hdfs`.
+*   Đã triển khai cast key columns, chuẩn hóa `icd_code`, tạo `is_primary_diagnosis` và `primary_icd_code`.
+*   Đã bổ sung metrics input count, invalid required fields, final count, distinct admissions, distinct ICD codes, primary diagnosis rows và ICD version distribution.
+*   Đã kiểm tra cú pháp bằng `python3 -m py_compile src/etl/silver_diagnoses.py`.
+*   Đã chạy local Spark bằng Docker thành công.
+*   Local validation metrics: raw diagnoses `99`, invalid required fields `0`, final Silver diagnoses `99`, distinct admissions `16`, distinct ICD codes `71`, primary diagnosis rows `16`, ICD-9 rows `65`, ICD-10 rows `34`.
+*   Local output đã ghi tại `data/silver/diagnoses/` với `_SUCCESS`.
+
+Lệnh chạy local qua Docker:
+
+```bash
+sudo docker exec predictcare-spark-dev spark-submit /home/jovyan/src/etl/silver_diagnoses.py local
+```
+
+Lệnh chạy production trên VM/HDFS:
+
+```bash
+spark-submit src/etl/silver_diagnoses.py hdfs
 ```
 
 Input:
@@ -342,6 +410,29 @@ Script đề xuất:
 
 ```text
 src/etl/silver_eicu_harmonized.py
+```
+
+Trạng thái triển khai:
+
+*   Đã tự xác nhận schema thực tế từ Bronze local: `systemicsystolic`, `sao2`, `heartrate`, `temperature`, `observationoffset`, `patientunitstayid`, `hospitalid`.
+*   Đã tạo script `src/etl/silver_eicu_harmonized.py`.
+*   Script hỗ trợ tham số `local` và `hdfs`.
+*   Đã triển khai harmonized feature theo ICU stay: `stay_id_eicu`, `hospitalid`, demographic fields, mortality flag từ `unitdischargestatus`, aggregate SBP/SpO2/HR/Temperature trong 24h đầu theo `observationoffset` `[0, 1440)`.
+*   Đã kiểm tra cú pháp bằng `python3 -m py_compile src/etl/silver_eicu_harmonized.py`.
+*   Đã chạy local Spark bằng Docker thành công.
+*   Local validation metrics: raw patient `99`, raw vitalPeriodic `99`, invalid patient keys `0`, invalid vital keys `0`, rows vital trong 24h đầu `59`, stays có 24h vitals `1`, final harmonized rows `99`, missing SBP `99/99`, SpO2 `98/99`, HR `98/99`, Temperature `99/99`.
+*   Local output đã ghi tại `data/silver/eicu_harmonized/` với `_SUCCESS` và partition `hospitalid=*`.
+
+Lệnh chạy local qua Docker:
+
+```bash
+sudo docker exec predictcare-spark-dev spark-submit /home/jovyan/src/etl/silver_eicu_harmonized.py local
+```
+
+Lệnh chạy production trên VM/HDFS:
+
+```bash
+spark-submit src/etl/silver_eicu_harmonized.py hdfs
 ```
 
 Input:
@@ -400,7 +491,7 @@ Validation metrics:
 
 ### Phase 6: MIMIC-IV-Note Silver NLP
 
-Trạng thái: pending vì dữ liệu note sẽ được cập nhật sau.
+Trạng thái: Bronze note đã ingest và validate thành công; Silver NLP có thể triển khai sau các job structured Silver hoặc song song nếu cần.
 
 Script đề xuất sau khi có data:
 
@@ -408,6 +499,28 @@ Script đề xuất sau khi có data:
 src/nlp/notes_clean.py
 src/nlp/train_word2vec.py
 src/nlp/note_embeddings.py
+```
+
+Trạng thái triển khai:
+
+*   Đã tạo script `src/nlp/notes_clean.py`.
+*   Script hỗ trợ tham số `local` và `hdfs`.
+*   Input Bronze dùng đúng path `bronze/mimic_iv_note/discharge`.
+*   Đã triển khai strip PHI placeholders dạng `[**...**]`, lowercase, normalize whitespace, tokenize bằng `RegexTokenizer`, remove stopwords bằng `StopWordsRemover`, tạo `token_count`.
+*   Đã bổ sung metrics raw notes count, clean notes count, token count distribution và số admission có clean notes nếu có `hadm_id`.
+*   Đã kiểm tra cú pháp bằng `python3 -m py_compile src/nlp/notes_clean.py`.
+*   Chưa chạy local Spark vì workspace hiện chưa có `data/bronze/mimic_iv_note/discharge/`.
+
+Lệnh chạy local qua Docker sau khi có Bronze Note local:
+
+```bash
+sudo docker exec predictcare-spark-dev spark-submit /home/jovyan/src/nlp/notes_clean.py local
+```
+
+Lệnh chạy production trên VM/HDFS:
+
+```bash
+spark-submit src/nlp/notes_clean.py hdfs
 ```
 
 Input:
@@ -526,9 +639,8 @@ src/
 3.  Tạo `silver_diagnoses.py`.
 4.  Tạo `silver_labs.py`.
 5.  Tạo `silver_eicu_harmonized.py`.
-6.  Bổ sung MIMIC-IV-Note Bronze/Silver NLP sau khi có `discharge.csv`.
-7.  Chạy lại `validate_bronze.py` cho MIMIC-IV-Note sau khi ingestion notes hoàn tất.
-8.  Tạo `build_gold_dataset.py`.
+6.  Bổ sung MIMIC-IV-Note Silver NLP từ Bronze note đã validate.
+7.  Tạo `build_gold_dataset.py`.
 
 ---
 
