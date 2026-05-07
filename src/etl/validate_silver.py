@@ -86,6 +86,18 @@ SILVER_TABLES = {
         "required_non_null": ["stay_id_eicu", "hospitalid"],
         "distinct_key": "stay_id_eicu",
     },
+    "notes_clean": {
+        "path": "silver/notes_clean",
+        "required_columns": [
+            "subject_id",
+            "hadm_id",
+            "note_text_clean",
+            "tokens",
+            "token_count",
+        ],
+        "required_non_null": ["subject_id", "hadm_id", "note_text_clean"],
+        "distinct_key": "hadm_id",
+    },
 }
 
 
@@ -164,7 +176,7 @@ def validate_relationships(spark, base_path):
     admissions_count = admissions.count()
     print(f"[METRIC] Silver admissions distinct hadm_id: {admissions_count}")
 
-    for table_name in ["chartevents_agg", "diagnoses", "labs_agg"]:
+    for table_name in ["chartevents_agg", "diagnoses", "labs_agg", "notes_clean"]:
         path = f"{base_path}/silver/{table_name}"
         if not hdfs_path_exists(spark, path):
             print(f"[WARN] Skipping relationship check for missing table: {table_name}")

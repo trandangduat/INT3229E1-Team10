@@ -2,7 +2,7 @@
 **Dự án:** PREDICTCARE AI - CDSS Dashboard (Team 10)
 **Vai trò:** Big Data Engineering - Distributed ETL & Feature Engineering
 **Phạm vi:** Bronze -> Silver transformation sau khi production ingestion hoàn tất
-**Trạng thái hiện tại:** MIMIC-IV, eICU và MIMIC-IV-Note đã hoàn tất production Bronze ingestion + validation trên VM/HDFS. Bronze validation PASS cho 11 bảng.
+**Trạng thái hiện tại:** Silver Layer đã hoàn tất production validation trên HDFS. Tất cả 6 Silver tables + relationship checks PASS. Sẵn sàng triển khai Gold Layer.
 
 ---
 
@@ -124,6 +124,9 @@ Trạng thái triển khai:
 *   Đã chạy local Spark bằng Docker thành công.
 *   Local validation metrics: raw admissions `99`, raw patients `99`, invalid required casts `0`, join count `99`, final Silver admissions `87`, mortality rate `1.15%`, duration min/max/avg `1/18/3.51`, missing mortality `0/87`.
 *   Local output đã ghi tại `data/silver/admissions/` với `_SUCCESS` và partition `admityear=*`.
+*   **Đã chạy production trên HDFS thành công.**
+*   **Production metrics: row count `391,265`, distinct `hadm_id` `391,265`, null subject_id/hadm_id/admittime/dischtime/admityear = `0`.**
+*   **`validate_silver.py` PASS: `_SUCCESS`, required columns, required non-null.**
 
 Lệnh chạy local qua Docker:
 
@@ -205,6 +208,9 @@ Trạng thái triển khai:
 *   Đã chạy local Spark bằng Docker thành công.
 *   Local validation metrics: raw chartevents `10000`, rows sau vital itemid filter `652`, HR `200`, SBP `198`, SpO2 `196`, Temperature `58`, rows trong 24h đầu `155`, admissions có 24h vitals `4`, missing SBP/SpO2/HR/Temperature `0/4`.
 *   Local output đã ghi tại `data/silver/chartevents_agg/` với `_SUCCESS` và partition `admityear=*`.
+*   **Đã chạy production trên HDFS thành công.**
+*   **Production metrics: row count `52,588`, distinct `hadm_id` `52,588`, null hadm_id/admityear = `0`.**
+*   **`validate_silver.py` PASS: `_SUCCESS`, required columns, required non-null, hadm_id subset of admissions.**
 
 Lệnh chạy local qua Docker:
 
@@ -312,6 +318,10 @@ Trạng thái triển khai:
 *   Đã kiểm tra cú pháp bằng `python3 -m py_compile src/etl/silver_labs.py`.
 *   Đã chạy local Spark bằng Docker thành công. Local sample không có rows matching selected lab itemids sau filter nên output rỗng; production HDFS cần dùng để validate metrics thực tế.
 *   Local output đã ghi tại `data/silver/labs_agg/` với `_SUCCESS`.
+*   **Đã chạy production trên HDFS thành công.**
+*   **Output dùng long format để tránh OOM: `hadm_id`, `admityear`, `lab_name`, `lab_mean`, `lab_min`, `lab_max`, `lab_count`.**
+*   **Production metrics: row count `4,916,652`, distinct `hadm_id` `301,193`, null hadm_id/admityear/lab_name/lab_mean = `0`.**
+*   **`validate_silver.py` PASS: `_SUCCESS`, required columns, required non-null, hadm_id subset of admissions.**
 
 Lệnh chạy local qua Docker:
 
@@ -382,6 +392,10 @@ Trạng thái triển khai:
 *   Đã chạy local Spark bằng Docker thành công.
 *   Local validation metrics: raw diagnoses `99`, invalid required fields `0`, final Silver diagnoses `99`, distinct admissions `16`, distinct ICD codes `71`, primary diagnosis rows `16`, ICD-9 rows `65`, ICD-10 rows `34`.
 *   Local output đã ghi tại `data/silver/diagnoses/` với `_SUCCESS`.
+*   **Đã chạy production trên HDFS thành công.**
+*   **Đã sửa để filter diagnoses theo cohort `silver/admissions`, loại orphan `hadm_id`.**
+*   **Production metrics: row count `4,756,326`, distinct `hadm_id` `391,265` (khớp admissions cohort), null subject_id/hadm_id/seq_num/icd_code/icd_version = `0`.**
+*   **`validate_silver.py` PASS: `_SUCCESS`, required columns, required non-null, hadm_id subset of admissions.**
 
 Lệnh chạy local qua Docker:
 
@@ -447,6 +461,9 @@ Trạng thái triển khai:
 *   Đã chạy local Spark bằng Docker thành công.
 *   Local validation metrics: raw patient `99`, raw vitalPeriodic `99`, invalid patient keys `0`, invalid vital keys `0`, rows vital trong 24h đầu `59`, stays có 24h vitals `1`, final harmonized rows `99`, missing SBP `99/99`, SpO2 `98/99`, HR `98/99`, Temperature `99/99`.
 *   Local output đã ghi tại `data/silver/eicu_harmonized/` với `_SUCCESS` và partition `hospitalid=*`.
+*   **Đã chạy production trên HDFS thành công.**
+*   **Production metrics: row count `200,859`, distinct `stay_id_eicu` `200,859`, null stay_id_eicu/hospitalid = `0`.**
+*   **`validate_silver.py` PASS: `_SUCCESS`, required columns, required non-null.**
 
 Lệnh chạy local qua Docker:
 
@@ -531,21 +548,19 @@ Trạng thái triển khai:
 *   Đã tạo script `src/nlp/notes_clean.py`.
 *   Script hỗ trợ tham số `local` và `hdfs`.
 *   Input Bronze dùng đúng path `bronze/mimic_iv_note/discharge`.
-*   Đã triển khai strip PHI placeholders dạng `[**...**]`, lowercase, normalize whitespace, tokenize bằng `RegexTokenizer`, remove stopwords bằng `StopWordsRemover`, tạo `token_count`.
-*   Đã bổ sung metrics raw notes count, clean notes count, token count distribution và số admission có clean notes nếu có `hadm_id`.
-*   Đã kiểm tra cú pháp bằng `python3 -m py_compile src/nlp/notes_clean.py`.
-*   Chưa chạy local Spark vì workspace hiện chưa có `data/bronze/mimic_iv_note/discharge/`.
-
-Lệnh chạy local qua Docker sau khi có Bronze Note local:
-
-```bash
-sudo docker exec predictcare-spark-dev spark-submit /home/jovyan/src/nlp/notes_clean.py local
-```
+*   Đã triển khai strip PHI placeholders dạng `[**...**]`, lowercase, normalize whitespace, tokenize bằng PySpark SQL `split()`, remove stopwords bằng UDF Python, tạo `token_count`.
+*   Loại bỏ dependency `pyspark.ml` (không cần numpy) - chỉ dùng PySpark SQL functions.
+*   Tắt vectorized Parquet reader để tránh OOM khi đọc text dài.
+*   Thêm `repartition(200)` trước tokenize để giảm memory pressure.
+*   **Đã chạy production trên HDFS thành công.**
+*   **Production metrics: raw notes `331,793`, clean notes `331,793`, admissions with notes `331,793`.**
+*   **Token count distribution: min `18`, 25% `760`, 50% `1017`, 75% `1322`, max `5938`.**
+*   **`validate_silver.py` PASS: `_SUCCESS`, required columns, required non-null, hadm_id subset of admissions.**
 
 Lệnh chạy production trên VM/HDFS:
 
 ```bash
-spark-submit src/nlp/notes_clean.py hdfs
+spark-submit --driver-memory 6g --conf spark.sql.shuffle.partitions=200 src/nlp/notes_clean.py hdfs
 ```
 
 Input:
