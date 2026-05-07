@@ -6,12 +6,12 @@ from pyspark.sql import SparkSession
 def main():
     env = sys.argv[1] if len(sys.argv) > 1 else "local"
 
-    # Khởi tạo Spark Session
     builder = SparkSession.builder.appName("Bronze_Ingestion_eICU")
     if env == "local":
         builder = builder.master("local[*]")
     spark = builder.getOrCreate()
-
+# Khởi tạo Spark Session
+    
     if env == "local":
         base_input_path = "data/raw"
         base_output_path = "data/bronze/eicu"

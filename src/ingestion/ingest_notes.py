@@ -18,7 +18,7 @@ def main():
     else:
         # Giả sử file discharge.csv nằm trong note/
         file_path = (
-            "hdfs://master10:9000/user/dis/data/raw_data/mimic/note/discharge.csv"
+            "hdfs://master10:9000/user/dis/data/raw_data/mimic_notes/discharge.csv"
         )
         output_dir = "hdfs://master10:9000/user/dis/data/bronze/mimic_iv_note/discharge"
 
