@@ -25,13 +25,23 @@ def main():
     spark = builder.getOrCreate()
     spark.sparkContext.setLogLevel("WARN")
 
-    input_path = f"{base_path}/bronze/mimic_iv/diagnoses_icd"
+    bronze_diagnoses_path = f"{base_path}/bronze/mimic_iv/diagnoses_icd"
+    admissions_path = f"{base_path}/silver/admissions"
     output_path = f"{base_path}/silver/diagnoses"
 
-    print(f"[INFO] Reading Bronze diagnoses from: {input_path}")
-    df_raw = spark.read.parquet(input_path)
+    print(f"[INFO] Reading Bronze diagnoses from: {bronze_diagnoses_path}")
+    print(f"[INFO] Reading Silver admissions cohort from: {admissions_path}")
+    df_raw = spark.read.parquet(bronze_diagnoses_path)
+    df_adm = (
+        spark.read.parquet(admissions_path)
+        .select(col("hadm_id").cast("long").alias("hadm_id"))
+        .distinct()
+    )
+
     input_count = df_raw.count()
+    cohort_count = df_adm.count()
     print(f"[METRIC] Raw diagnoses count: {input_count}")
+    print(f"[METRIC] Silver admissions cohort distinct hadm_id: {cohort_count}")
 
     df_cast = df_raw.select(
         col("subject_id").cast("long").alias("subject_id"),
@@ -51,18 +61,27 @@ def main():
     ).count()
     print(f"[METRIC] Rows with invalid required fields: {invalid_required_count}")
 
-    df_silver = (
-        df_cast.filter(
-            col("subject_id").isNotNull()
-            & col("hadm_id").isNotNull()
-            & col("seq_num").isNotNull()
-            & col("icd_code").isNotNull()
-            & (col("icd_code") != "")
-            & col("icd_version").isNotNull()
-        )
-        .withColumn("is_primary_diagnosis", when(col("seq_num") == 1, 1).otherwise(0))
-        .withColumn("primary_icd_code", when(col("seq_num") == 1, col("icd_code")))
+    df_clean = df_cast.filter(
+        col("subject_id").isNotNull()
+        & col("hadm_id").isNotNull()
+        & col("seq_num").isNotNull()
+        & col("icd_code").isNotNull()
+        & (col("icd_code") != "")
+        & col("icd_version").isNotNull()
     )
+
+    clean_count = df_clean.count()
+    print(f"[METRIC] Rows after null/empty filter: {clean_count}")
+
+    df_cohort = df_clean.join(df_adm, on="hadm_id", how="inner")
+    cohort_match_count = df_cohort.count()
+    orphan_count = clean_count - cohort_match_count
+    print(f"[METRIC] Rows after cohort filter: {cohort_match_count}")
+    print(f"[METRIC] Orphan rows removed (hadm_id not in admissions): {orphan_count}")
+
+    df_silver = df_cohort.withColumn(
+        "is_primary_diagnosis", when(col("seq_num") == 1, 1).otherwise(0)
+    ).withColumn("primary_icd_code", when(col("seq_num") == 1, col("icd_code")))
 
     final_count = df_silver.count()
     print(f"[METRIC] Final Silver diagnoses count: {final_count}")

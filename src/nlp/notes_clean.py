@@ -1,9 +1,138 @@
 import argparse
 
-from pyspark.ml.feature import RegexTokenizer, StopWordsRemover
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, lower, regexp_replace, size, trim
+from pyspark.sql.functions import (
+    col,
+    expr,
+    lower,
+    regexp_replace,
+    size,
+    split,
+    trim,
+    udf,
+)
+from pyspark.sql.types import ArrayType, StringType
 
+ENGLISH_STOPWORDS = [
+    "a",
+    "an",
+    "the",
+    "and",
+    "or",
+    "but",
+    "if",
+    "in",
+    "on",
+    "at",
+    "to",
+    "for",
+    "of",
+    "with",
+    "by",
+    "from",
+    "is",
+    "was",
+    "are",
+    "were",
+    "been",
+    "be",
+    "have",
+    "has",
+    "had",
+    "do",
+    "does",
+    "did",
+    "will",
+    "would",
+    "could",
+    "should",
+    "may",
+    "might",
+    "shall",
+    "can",
+    "this",
+    "that",
+    "these",
+    "those",
+    "it",
+    "its",
+    "not",
+    "no",
+    "nor",
+    "as",
+    "so",
+    "than",
+    "too",
+    "very",
+    "just",
+    "about",
+    "above",
+    "after",
+    "again",
+    "all",
+    "also",
+    "am",
+    "any",
+    "because",
+    "before",
+    "being",
+    "between",
+    "both",
+    "during",
+    "each",
+    "few",
+    "further",
+    "get",
+    "got",
+    "here",
+    "how",
+    "into",
+    "more",
+    "most",
+    "my",
+    "now",
+    "only",
+    "other",
+    "our",
+    "out",
+    "over",
+    "own",
+    "same",
+    "she",
+    "he",
+    "him",
+    "her",
+    "his",
+    "they",
+    "them",
+    "their",
+    "then",
+    "there",
+    "through",
+    "under",
+    "until",
+    "up",
+    "us",
+    "we",
+    "what",
+    "when",
+    "where",
+    "which",
+    "while",
+    "who",
+    "whom",
+    "why",
+    "you",
+    "your",
+    "me",
+    "i",
+    "s",
+    "t",
+    "d",
+    "ll",
+    "ve",
+    "re",
+]
 
 MEDICAL_STOPWORDS = [
     "admission",
@@ -12,7 +141,19 @@ MEDICAL_STOPWORDS = [
     "name",
     "patient",
     "hospital",
+    "hospitalname",
+    "md",
+    "patientname",
+    "namepattern",
+    "clip",
+    "dr",
+    "report",
+    "completed",
+    "signed",
+    "electronic",
 ]
+
+STOPWORDS = list(set(ENGLISH_STOPWORDS + MEDICAL_STOPWORDS))
 
 
 def first_existing_column(columns, candidates):
@@ -85,23 +226,30 @@ def main():
         ),
     ).filter(col("note_text_clean") != "")
 
-    tokenizer = RegexTokenizer(
-        inputCol="note_text_clean",
-        outputCol="tokens_raw",
-        pattern="[^a-z0-9]+",
-        gaps=True,
-        minTokenLength=2,
-    )
-    tokenized = tokenizer.transform(df_clean)
+    clean_count = df_clean.count()
+    print(f"[METRIC] Notes after PHI strip and empty filter: {clean_count}")
 
-    remover = StopWordsRemover(
-        inputCol="tokens_raw",
-        outputCol="tokens",
-        stopWords=StopWordsRemover.loadDefaultStopWords("english") + MEDICAL_STOPWORDS,
+    df_tokens = df_clean.withColumn(
+        "tokens_raw", split(col("note_text_clean"), r"[^a-z0-9]+")
+    ).withColumn(
+        "tokens_filtered",
+        expr("filter(tokens_raw, x -> length(x) >= 2)"),
     )
+
+    stopword_set = set(STOPWORDS)
+    stopwords_broadcast = spark.sparkContext.broadcast(stopword_set)
+
+    def remove_stopwords(tokens):
+        sw = stopwords_broadcast.value
+        if tokens is None:
+            return None
+        return [t for t in tokens if t not in sw]
+
+    remove_stopwords_udf = udf(remove_stopwords, ArrayType(StringType()))
+
     df_silver = (
-        remover.transform(tokenized)
-        .drop("tokens_raw")
+        df_tokens.withColumn("tokens", remove_stopwords_udf(col("tokens_filtered")))
+        .drop("tokens_raw", "tokens_filtered")
         .withColumn("token_count", size(col("tokens")))
     )
 
