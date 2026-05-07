@@ -95,15 +95,16 @@ SILVER_TABLES = {
 
 def hdfs_success_exists(spark, path):
     hadoop_conf = spark.sparkContext._jsc.hadoopConfiguration()
-    fs = spark.sparkContext._jvm.org.apache.hadoop.fs.FileSystem.get(hadoop_conf)
     success_path = spark.sparkContext._jvm.org.apache.hadoop.fs.Path(f"{path}/_SUCCESS")
+    fs = success_path.getFileSystem(hadoop_conf)
     return fs.exists(success_path)
 
 
 def hdfs_path_exists(spark, path):
     hadoop_conf = spark.sparkContext._jsc.hadoopConfiguration()
-    fs = spark.sparkContext._jvm.org.apache.hadoop.fs.FileSystem.get(hadoop_conf)
-    return fs.exists(spark.sparkContext._jvm.org.apache.hadoop.fs.Path(path))
+    hadoop_path = spark.sparkContext._jvm.org.apache.hadoop.fs.Path(path)
+    fs = hadoop_path.getFileSystem(hadoop_conf)
+    return fs.exists(hadoop_path)
 
 
 def validate_table(spark, base_path, table_name, config):
