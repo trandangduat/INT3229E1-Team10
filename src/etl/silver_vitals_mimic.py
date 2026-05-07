@@ -18,12 +18,14 @@ VITAL_ITEMIDS = {
     "sbp": [220050, 220179],
     "spo2": [220277],
     "hr": [220045],
+    "temperature": [223761, 223762],
 }
 
 VITAL_RANGES = {
     "sbp": (40, 300),
     "spo2": (50, 100),
     "hr": (20, 250),
+    "temperature": (25, 45),
 }
 
 
@@ -97,6 +99,13 @@ def main():
         col("valuenum").cast("double").alias("valuenum"),
     ).filter(col("itemid").isin(all_itemids))
 
+    df_chart = df_chart.withColumn(
+        "valuenum",
+        when(col("itemid") == 223761, (col("valuenum") - 32) * 5 / 9).otherwise(
+            col("valuenum")
+        ),
+    )
+
     vital_item_count = df_chart.count()
     print(f"[METRIC] Rows after vital itemid filter: {vital_item_count}")
 
@@ -128,12 +137,14 @@ def main():
         sum(col("sbp_mean").isNull().cast("int")).alias("missing_sbp"),
         sum(col("spo2_mean").isNull().cast("int")).alias("missing_spo2"),
         sum(col("hr_mean").isNull().cast("int")).alias("missing_hr"),
+        sum(col("temperature_mean").isNull().cast("int")).alias("missing_temperature"),
     ).collect()[0]
     print(
         "[METRIC] Missing vitals: "
         f"SBP {missing['missing_sbp']}/{missing['rows']}, "
         f"SpO2 {missing['missing_spo2']}/{missing['rows']}, "
-        f"HR {missing['missing_hr']}/{missing['rows']}"
+        f"HR {missing['missing_hr']}/{missing['rows']}, "
+        f"Temperature {missing['missing_temperature']}/{missing['rows']}"
     )
 
     print(f"[INFO] Writing MIMIC vitals aggregate to: {output_path}")

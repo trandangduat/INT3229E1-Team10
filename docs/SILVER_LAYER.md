@@ -197,13 +197,13 @@ src/etl/silver_vitals_mimic.py
 
 Trạng thái triển khai:
 
-*   Đã tự xác nhận `itemid` từ Bronze `d_items` local cho các vital có trong sample: SBP `220050`, `220179`; SpO2 `220277`; HR `220045`.
-*   Temperature chưa triển khai vì Bronze `d_items` sample local không chứa itemid nhiệt độ; cần xác nhận từ full VM/HDFS `d_items` hoặc bạn cung cấp itemid.
-*   Đã tạo script `src/etl/silver_vitals_mimic.py` cho SBP, SpO2 và HR trong 24h đầu admission.
+*   Đã tự xác nhận `itemid` từ full HDFS Bronze `d_items`: SBP `220050`, `220179`; SpO2 `220277`; HR `220045`; Temperature `223761`, `223762`.
+*   Temperature Fahrenheit `223761` được convert sang Celsius trước khi aggregate; Temperature Celsius `223762` giữ nguyên.
+*   Đã tạo script `src/etl/silver_vitals_mimic.py` cho SBP, SpO2, HR và Temperature trong 24h đầu admission.
 *   Script hỗ trợ tham số `local` và `hdfs`.
 *   Đã kiểm tra cú pháp bằng `python3 -m py_compile src/etl/silver_vitals_mimic.py`.
 *   Đã chạy local Spark bằng Docker thành công.
-*   Local validation metrics: raw chartevents `10000`, rows sau vital itemid filter `594`, HR `200`, SBP `198`, SpO2 `196`, rows trong 24h đầu `143`, admissions có 24h vitals `4`, missing SBP/SpO2/HR `0/4`.
+*   Local validation metrics: raw chartevents `10000`, rows sau vital itemid filter `652`, HR `200`, SBP `198`, SpO2 `196`, Temperature `58`, rows trong 24h đầu `155`, admissions có 24h vitals `4`, missing SBP/SpO2/HR/Temperature `0/4`.
 *   Local output đã ghi tại `data/silver/chartevents_agg/` với `_SUCCESS` và partition `admityear=*`.
 
 Lệnh chạy local qua Docker:
@@ -285,7 +285,7 @@ Validation metrics:
 
 Điểm cần xác nhận trước khi code:
 
-*   Temperature MIMIC itemid cần xác nhận trên full VM/HDFS `d_items` vì sample local không chứa candidate nhiệt độ.
+*   Temperature MIMIC itemid đã xác nhận trên full VM/HDFS `d_items`: `223761`, `223762`.
 *   SBP đã lấy cả invasive và non-invasive: `220050`, `220179`.
 
 ---
@@ -298,6 +298,29 @@ Script đề xuất:
 
 ```text
 src/etl/silver_labs.py
+```
+
+Trạng thái triển khai:
+
+*   Đã tự xác nhận lab mapping từ full HDFS Bronze `d_labitems` và tần suất `labevents`.
+*   Đã tạo script `src/etl/silver_labs.py`.
+*   Script hỗ trợ tham số `local` và `hdfs`.
+*   Window feature đã chốt: aggregate lab trong 24h đầu admission, đồng nhất với vitals và giảm leakage.
+*   Feature đã chọn: hematocrit, hemoglobin, platelet, WBC, creatinine, BUN, sodium, potassium, chloride, bicarbonate, anion gap, glucose, calcium, magnesium, phosphate, INR, PT, PTT, ALT, AST, total bilirubin, albumin, lactate.
+*   Đã kiểm tra cú pháp bằng `python3 -m py_compile src/etl/silver_labs.py`.
+*   Đã chạy local Spark bằng Docker thành công. Local sample không có rows matching selected lab itemids sau filter nên output rỗng; production HDFS cần dùng để validate metrics thực tế.
+*   Local output đã ghi tại `data/silver/labs_agg/` với `_SUCCESS`.
+
+Lệnh chạy local qua Docker:
+
+```bash
+sudo docker exec predictcare-spark-dev spark-submit /home/jovyan/src/etl/silver_labs.py local
+```
+
+Lệnh chạy production trên VM/HDFS:
+
+```bash
+spark-submit src/etl/silver_labs.py hdfs
 ```
 
 Input:
@@ -332,7 +355,7 @@ Validation metrics:
 
 Điểm cần xác nhận trước khi code:
 
-*   Cần bổ sung Bronze `mimic_iv/d_labitems` để tự xác nhận mapping lab itemid -> feature name từ dữ liệu thực tế.
+*   Đã hoàn tất xác nhận mapping lab itemid -> feature name từ full HDFS `d_labitems`.
 *   Window feature đã chốt: aggregate lab trong 24h đầu admission, đồng nhất với vitals và giảm leakage.
 
 ---
