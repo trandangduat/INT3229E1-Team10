@@ -167,7 +167,7 @@ def build_table_specs(base_path, include_note=True):
             TableSpec(
                 dataset="mimic_iv_note",
                 table="discharge",
-                raw_path=f"{raw_base}/mimic/note/discharge.csv",
+                raw_path=f"{raw_base}/mimic_notes/discharge.csv",
                 bronze_path=f"{bronze_base}/mimic_iv_note/discharge",
                 multiline=True,
             )
