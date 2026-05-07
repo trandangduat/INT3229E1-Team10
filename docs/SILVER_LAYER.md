@@ -2,7 +2,7 @@
 **Dự án:** PREDICTCARE AI - CDSS Dashboard (Team 10)
 **Vai trò:** Big Data Engineering - Distributed ETL & Feature Engineering
 **Phạm vi:** Bronze -> Silver transformation sau khi production ingestion hoàn tất
-**Trạng thái hiện tại:** Silver Layer đã hoàn tất production validation trên HDFS. Tất cả 6 Silver tables + relationship checks PASS. Sẵn sàng triển khai Gold Layer.
+**Trạng thái hiện tại:** Silver Layer đã hoàn tất production validation trên HDFS. Tất cả 6 Silver tables + relationship checks PASS. `event_flag_readmission` đã được bổ sung. Gold Layer đã hoàn thành production (592,124 rows × 59 columns). Sẵn sàng triển khai ML Layer.
 
 ---
 
@@ -127,6 +127,8 @@ Trạng thái triển khai:
 *   **Đã chạy production trên HDFS thành công.**
 *   **Production metrics: row count `391,265`, distinct `hadm_id` `391,265`, null subject_id/hadm_id/admittime/dischtime/admityear = `0`.**
 *   **`validate_silver.py` PASS: `_SUCCESS`, required columns, required non-null.**
+*   **Đã bổ sung `event_flag_readmission` (30-day readmission) bằng Window function `lag()` trên cùng `subject_id`.**
+*   **Production readmission rate: `19.28%` (75,450 / 391,265 admissions).**
 
 Lệnh chạy local qua Docker:
 
@@ -599,10 +601,34 @@ Validation metrics:
 
 Sau khi các Silver jobs ổn định, tạo Gold Analytical Dataset.
 
-Script đề xuất:
+Script:
 
 ```text
 src/etl/build_gold_dataset.py
+src/etl/validate_gold.py
+```
+
+Trạng thái triển khai:
+
+*   Đã tạo script `src/etl/build_gold_dataset.py` và `src/etl/validate_gold.py`.
+*   Script hỗ trợ tham số `local` và `hdfs`, cùng `--include-eicu` và `--include-notes`.
+*   Đã kiểm tra cú pháp bằng `python3 -m py_compile`.
+*   Đã chạy local Spark bằng Docker thành công.
+*   **Đã chạy production trên HDFS thành công (MIMIC + eICU).**
+*   **Production metrics: 592,124 rows, 59 columns, 4 splits (train/val/test/test_external).**
+*   **`validate_gold.py` production PASS.**
+
+Lệnh chạy production trên VM/HDFS:
+
+```bash
+# MIMIC only:
+spark-submit --driver-memory 6g --conf spark.sql.shuffle.partitions=200 src/etl/build_gold_dataset.py hdfs
+
+# MIMIC + eICU:
+spark-submit --driver-memory 6g --conf spark.sql.shuffle.partitions=200 src/etl/build_gold_dataset.py hdfs --include-eicu
+
+# Validate:
+spark-submit src/etl/validate_gold.py hdfs
 ```
 
 Input:
@@ -613,23 +639,27 @@ Input:
 /data/silver/labs_agg/
 /data/silver/diagnoses/
 /data/silver/eicu_harmonized/
-/data/silver/note_embeddings/
+/data/silver/note_embeddings/   (optional, --include-notes)
 ```
 
 Gold logic:
 
 *   Base table là `silver/admissions`.
-*   Left join vitals, labs, diagnoses, notes embeddings.
-*   Tạo ICD one-hot hoặc ICD chapter features.
-*   Tạo train/val/test split theo thời gian để tránh leakage.
+*   Left join vitals từ `chartevents_agg` (SBP, SpO2, HR, Temperature).
+*   Pivot labs từ long → wide (23 lab features: albumin, alt, anion_gap, ast, bicarbonate, bilirubin_total, bun, calcium, chloride, creatinine, glucose, hematocrit, hemoglobin, inr, lactate, magnesium, phosphate, platelet, potassium, pt, ptt, sodium, wbc).
+*   One-hot ICD chapters (21 chapters: ICD-9 + ICD-10 mapped to unified chapter system).
+*   Temporal split bằng `approxQuantile(70%, 85%)` trên de-identified years.
+*   Optional: Union eICU harmonized vào `test_external` split.
+*   Optional: Left join note embeddings (khi Word2Vec hoàn tất).
 *   Partition output theo `split`.
 
 Output dự kiến:
 
 ```text
-/data/gold/analytical_dataset/split=train/
-/data/gold/analytical_dataset/split=val/
-/data/gold/analytical_dataset/split=test/
+/data/gold/analytical_dataset/split=train/       (277,735 rows)
+/data/gold/analytical_dataset/split=val/          (58,693 rows)
+/data/gold/analytical_dataset/split=test/         (54,837 rows)
+/data/gold/analytical_dataset/split=test_external/ (200,859 rows)
 ```
 
 ---
@@ -650,6 +680,7 @@ src/
     silver_diagnoses.py
     silver_eicu_harmonized.py
     build_gold_dataset.py
+    validate_gold.py
   nlp/
     notes_clean.py
     train_word2vec.py
