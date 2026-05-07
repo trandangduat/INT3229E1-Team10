@@ -1,4 +1,4 @@
-# BÁO CÁO TIẾN ĐỘ & KẾ HOẠCH LÀM VIỆC
+# BÁO CÁO BRONZE LAYER
 **Vai trò:** Data Ingestion Engineer
 **Dự án:** PREDICTCARE AI - CDSS Dashboard (Team 10)
 **Mục tiêu Tầng:** Bronze Layer (Raw Data to Parquet+Snappy)
@@ -40,7 +40,7 @@
 *   **Script đã tạo:**
     *   `src/ingestion/ingest_mimic.py`
     *   `src/ingestion/ingest_eicu.py`
-    *   `src/ingestion/ingest_notes.py` (đã chuẩn bị code, chờ cập nhật dữ liệu MIMIC-IV-Note để test)
+    *   `src/ingestion/ingest_notes.py`
 *   **Quyết định kiến trúc:** Bronze layer giữ dữ liệu hoàn toàn raw. Không rename cột, không cast kiểu dữ liệu, không filter, không drop null. Việc chuẩn hóa schema giữa MIMIC-IV và eICU sẽ chuyển sang Silver layer.
 *   **Cách đọc CSV:** Dùng `header=True` và `inferSchema=False`. PySpark sẽ lấy tên cột từ header của file CSV và đọc toàn bộ giá trị dưới dạng string, tránh việc Spark scan file lớn để đoán schema.
 *   **Cách ghi output:** Luôn ghi `Parquet` với nén `Snappy` bằng `df.write.parquet(path, mode="overwrite", compression="snappy")`.
@@ -78,16 +78,18 @@
     *   `raw_rows == bronze_rows`.
     *   Header columns raw CSV khớp với columns trong Bronze Parquet.
     *   Bronze columns đều là `string`, đúng nguyên tắc raw Bronze.
+*   **Kết quả tổng thể:** Đã chạy đầy đủ Bronze ingestion trên VM instance/HDFS cho 3 dataset: MIMIC-IV, eICU và MIMIC-IV-Note.
+*   **Bronze validation:** `validate_bronze.py` đã validate thành công 11 bảng Bronze trên HDFS.
 *   **Kết quả MIMIC-IV:** Đã chạy production ingestion và validate thành công trên HDFS cho các bảng MIMIC-IV đã xử lý, bao gồm cả bảng lớn `chartevents`.
 *   **Kết quả eICU:** Đã chạy production ingestion và validate thành công trên HDFS cho các bảng `patient`, `vitalPeriodic`, `diagnosis`, `medication`.
-*   **Trạng thái MIMIC-IV-Note:** Chưa xử lý production ingestion/validation vì dữ liệu `discharge.csv` sẽ được cập nhật sau.
+*   **Kết quả MIMIC-IV-Note:** Đã chạy production ingestion và validate thành công trên HDFS cho dữ liệu note, bao gồm `discharge.csv`.
 *   **Base path chuẩn:** Tất cả production data dùng base path `hdfs://master10:9000/user/dis/data`.
 
 ---
 
-## 3. KẾ HOẠCH LÀM VIỆC TIẾP THEO (NEXT STEPS)
+## 3. TRẠNG THÁI HOÀN THÀNH VÀ BƯỚC TIẾP THEO
 
-Dưới đây là các tác vụ mà AI Agent và tôi cần tiếp tục triển khai:
+Dưới đây là trạng thái các tác vụ Bronze Layer sau khi chạy production trên VM/HDFS:
 
 ### TÁC VỤ 1: Hoàn thiện Script Ingestion cho toàn bộ bảng MIMIC-IV
 *   **Trạng thái:** Đã hoàn thành production ingestion và validation trên VM/HDFS.
@@ -100,14 +102,13 @@ Dưới đây là các tác vụ mà AI Agent và tôi cần tiếp tục triể
 *   **Quyết định:** Không ánh xạ schema, không rename, không cast tại Bronze. Các thao tác như `systemicSystolic` -> `sbp` sẽ thực hiện ở Silver layer.
 
 ### TÁC VỤ 3: Xử lý file Text đa dòng của MIMIC-IV-Note
-*   **Trạng thái:** Pending data sample.
-*   **Đã chuẩn bị:** Đã tạo `src/ingestion/ingest_notes.py` với cấu hình PySpark CSV Reader `multiLine=True` và `escape='"'` để tránh vỡ dòng khi đọc ghi chú lâm sàng nhiều dòng.
-*   **Cần làm tiếp:** Chờ cập nhật dữ liệu MIMIC-IV-Note (`discharge.csv`) để chạy local validation.
+*   **Trạng thái:** Đã hoàn thành production ingestion và validation trên VM/HDFS.
+*   **Kết quả:** Đã tạo `src/ingestion/ingest_notes.py` với cấu hình PySpark CSV Reader `multiLine=True` và `escape='"'` để tránh vỡ dòng khi đọc ghi chú lâm sàng nhiều dòng; output Parquet+Snappy đã được ghi và validate thành công tại `hdfs://master10:9000/user/dis/data/bronze/mimic_note/`.
 
 ### TÁC VỤ 4: Scale Up lên GCP Production (Máy ảo `bigdata2`)
-*   **Trạng thái:** Đã thực hiện cho MIMIC-IV và eICU.
+*   **Trạng thái:** Đã hoàn thành cho MIMIC-IV, eICU và MIMIC-IV-Note.
 *   **Kết quả:** Production Bronze output đã được ghi và validate tại `hdfs://master10:9000/user/dis/data/bronze/`.
-*   **Còn lại:** MIMIC-IV-Note (`discharge.csv`) sẽ được chạy production ingestion và validation sau khi dữ liệu được cập nhật.
+*   **Tổng kết:** Bronze Layer đã ingest đầy đủ 3 dataset và validate thành công 11 bảng trên HDFS. Có thể chuyển sang triển khai Silver Layer.
 
 ---
 
