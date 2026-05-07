@@ -307,6 +307,8 @@ Trạng thái triển khai:
 *   Script hỗ trợ tham số `local` và `hdfs`.
 *   Window feature đã chốt: aggregate lab trong 24h đầu admission, đồng nhất với vitals và giảm leakage.
 *   Feature đã chọn: hematocrit, hemoglobin, platelet, WBC, creatinine, BUN, sodium, potassium, chloride, bicarbonate, anion gap, glucose, calcium, magnesium, phosphate, INR, PT, PTT, ALT, AST, total bilirubin, albumin, lactate.
+*   Output dùng long format để tránh OOM khi aggregate full HDFS: `hadm_id`, `admityear`, `lab_name`, `lab_mean`, `lab_min`, `lab_max`, `lab_count`.
+*   Wide feature table sẽ pivot ở Gold Layer nếu cần.
 *   Đã kiểm tra cú pháp bằng `python3 -m py_compile src/etl/silver_labs.py`.
 *   Đã chạy local Spark bằng Docker thành công. Local sample không có rows matching selected lab itemids sau filter nên output rỗng; production HDFS cần dùng để validate metrics thực tế.
 *   Local output đã ghi tại `data/silver/labs_agg/` với `_SUCCESS`.
@@ -320,7 +322,7 @@ sudo docker exec predictcare-spark-dev spark-submit /home/jovyan/src/etl/silver_
 Lệnh chạy production trên VM/HDFS:
 
 ```bash
-spark-submit src/etl/silver_labs.py hdfs
+spark-submit --driver-memory 6g --conf spark.sql.shuffle.partitions=400 src/etl/silver_labs.py hdfs
 ```
 
 Input:

@@ -8,9 +8,7 @@ from pyspark.sql.functions import (
     expr,
     max,
     min,
-    sum,
     to_timestamp,
-    when,
 )
 
 
@@ -39,16 +37,6 @@ LAB_ITEMIDS = {
     "albumin": [50862, 53085],
     "lactate": [50813, 52442, 53154],
 }
-
-
-def aggregate_lab(name):
-    value = when(col("lab_name") == name, col("valuenum"))
-    return [
-        avg(value).alias(f"{name}_mean"),
-        min(value).alias(f"{name}_min"),
-        max(value).alias(f"{name}_max"),
-        sum(value.isNotNull().cast("int")).alias(f"{name}_count"),
-    ]
 
 
 def main():
@@ -119,27 +107,27 @@ def main():
     window_count = df_24h.count()
     print(f"[METRIC] Rows in first 24h admission window: {window_count}")
 
-    agg_exprs = []
-    for name in LAB_ITEMIDS:
-        agg_exprs.extend(aggregate_lab(name))
-    df_silver = df_24h.groupBy("hadm_id", "admityear").agg(*agg_exprs)
+    df_silver = df_24h.groupBy("hadm_id", "admityear", "lab_name").agg(
+        avg("valuenum").alias("lab_mean"),
+        min("valuenum").alias("lab_min"),
+        max("valuenum").alias("lab_max"),
+        count("valuenum").alias("lab_count"),
+    )
 
     final_count = df_silver.count()
-    print(f"[METRIC] Admissions with 24h lab features: {final_count}")
+    admission_count = df_silver.select("hadm_id").distinct().count()
+    print(f"[METRIC] Admission-lab feature rows: {final_count}")
+    print(f"[METRIC] Admissions with 24h lab features: {admission_count}")
 
-    missing_exprs = [
-        sum(col(f"{name}_mean").isNull().cast("int")).alias(name)
-        for name in LAB_ITEMIDS
-    ]
-    missing = df_silver.agg(count("*").alias("rows"), *missing_exprs).collect()[0]
-    print("[METRIC] Missing lab feature means:")
-    for name in LAB_ITEMIDS:
-        print(f"[METRIC] {name}: {missing[name]}/{missing['rows']}")
+    print("[METRIC] Lab feature coverage:")
+    df_silver.groupBy("lab_name").agg(count("*").alias("admissions_with_lab")).orderBy(
+        "lab_name"
+    ).show(100, truncate=False)
 
     print(f"[INFO] Writing labs aggregate to: {output_path}")
-    df_silver.write.mode("overwrite").partitionBy("admityear").option(
-        "compression", "snappy"
-    ).parquet(output_path)
+    df_silver.repartition("admityear").write.mode("overwrite").partitionBy(
+        "admityear"
+    ).option("compression", "snappy").parquet(output_path)
 
     print("[INFO] silver_labs job completed successfully!")
     spark.stop()
