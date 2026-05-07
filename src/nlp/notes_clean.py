@@ -183,6 +183,11 @@ def main():
     builder = SparkSession.builder.appName("SilverLayer_NotesClean")
     if args.env == "local":
         builder = builder.master("local[*]")
+    builder = (
+        builder.config("spark.sql.parquet.enableVectorizedReader", "false")
+        .config("spark.sql.parquet.filterPushdown", "true")
+        .config("spark.sql.files.maxPartitionBytes", "134217728")
+    )
     spark = builder.getOrCreate()
     spark.sparkContext.setLogLevel("WARN")
 
@@ -191,8 +196,6 @@ def main():
 
     print(f"[INFO] Reading Bronze notes from: {input_path}")
     df_raw = spark.read.parquet(input_path)
-    input_count = df_raw.count()
-    print(f"[METRIC] Raw notes count: {input_count}")
 
     text_col = first_existing_column(df_raw.columns, ["text", "note_text"])
     if text_col is None:
@@ -226,14 +229,13 @@ def main():
         ),
     ).filter(col("note_text_clean") != "")
 
-    clean_count = df_clean.count()
-    print(f"[METRIC] Notes after PHI strip and empty filter: {clean_count}")
-
-    df_tokens = df_clean.withColumn(
-        "tokens_raw", split(col("note_text_clean"), r"[^a-z0-9]+")
-    ).withColumn(
-        "tokens_filtered",
-        expr("filter(tokens_raw, x -> length(x) >= 2)"),
+    df_tokens = (
+        df_clean.repartition(200)
+        .withColumn("tokens_raw", split(col("note_text_clean"), r"[^a-z0-9]+"))
+        .withColumn(
+            "tokens_filtered",
+            expr("filter(tokens_raw, x -> length(x) >= 2)"),
+        )
     )
 
     stopword_set = set(STOPWORDS)
@@ -253,18 +255,26 @@ def main():
         .withColumn("token_count", size(col("tokens")))
     )
 
+    print(f"[INFO] Writing clean notes to: {output_path}")
+    df_silver.write.mode("overwrite").option("compression", "snappy").parquet(
+        output_path
+    )
+
     final_count = df_silver.count()
     print(f"[METRIC] Clean notes count: {final_count}")
 
-    token_stats = df_silver.select("token_count").summary(
+    print(f"[INFO] Reading back for validation metrics...")
+    df_written = spark.read.parquet(output_path)
+
+    token_stats = df_written.select("token_count").summary(
         "min", "25%", "50%", "75%", "max"
     )
     print("[METRIC] Token count distribution:")
     token_stats.show(truncate=False)
 
-    if "hadm_id" in df_silver.columns:
+    if "hadm_id" in df_written.columns:
         admission_count = (
-            df_silver.select("hadm_id")
+            df_written.select("hadm_id")
             .where(col("hadm_id").isNotNull())
             .distinct()
             .count()
