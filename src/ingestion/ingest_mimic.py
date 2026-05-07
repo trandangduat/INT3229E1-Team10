@@ -1,11 +1,24 @@
-import sys
+import argparse
 
 from pyspark.sql import SparkSession
 
 
 def main():
-    # Sử dụng tham số dòng lệnh để xác định môi trường (local hay hdfs)
-    env = sys.argv[1] if len(sys.argv) > 1 else "local"
+    parser = argparse.ArgumentParser(description="Bronze ingestion for MIMIC-IV tables")
+    parser.add_argument(
+        "env",
+        nargs="?",
+        default="local",
+        choices=["local", "hdfs"],
+        help="Execution environment (local or hdfs)",
+    )
+    parser.add_argument(
+        "--tables",
+        nargs="+",
+        help="Optional table names to ingest. If omitted, all configured MIMIC-IV tables are ingested.",
+    )
+    args = parser.parse_args()
+    env = args.env
 
     # 1. Khởi tạo Spark Session
     builder = SparkSession.builder.appName("Bronze_Ingestion_MIMIC_IV")
@@ -37,6 +50,18 @@ def main():
         {"name": "d_labitems", "path": "hosp/d_labitems.csv"},
     ]
 
+    table_names = {table["name"] for table in tables}
+    if args.tables:
+        unknown_tables = sorted(set(args.tables) - table_names)
+        if unknown_tables:
+            raise ValueError(
+                f"Unknown table(s): {unknown_tables}. Available tables: {sorted(table_names)}"
+            )
+        tables = [table for table in tables if table["name"] in set(args.tables)]
+
+    print(f"Tables to ingest: {[table['name'] for table in tables]}")
+
+    failed_tables = []
     for table in tables:
         table_name = table["name"]
         file_path = f"{base_input_path}/{table['path']}"
@@ -56,6 +81,11 @@ def main():
 
         except Exception as e:
             print(f"[ERROR] Failed to process {table_name}. Reason: {e}")
+            failed_tables.append(table_name)
+
+    if failed_tables:
+        spark.stop()
+        raise RuntimeError(f"Failed to ingest table(s): {failed_tables}")
 
     spark.stop()
 
