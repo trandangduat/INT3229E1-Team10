@@ -1,12 +1,10 @@
 import argparse
-import hashlib
-import struct
 import time
 
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, size, udf
 from pyspark.sql.types import ArrayType, DoubleType
-
+from pyspark.ml.feature import Word2VecModel
 
 DIM = 128
 
@@ -15,31 +13,18 @@ def log(msg):
     print(msg, flush=True)
 
 
-def token_to_vector(token):
-    h = hashlib.md5(token.encode("utf-8")).digest()
-    result = []
-    for i in range(DIM):
-        seed_bytes = h + struct.pack("<I", i)
-        hash_val = int(hashlib.sha256(seed_bytes).hexdigest(), 16)
-        val = (hash_val % 20001 - 10000) / 10000.0
-        result.append(val)
-    return result
+def vector_to_array(v):
+    if v is None:
+        return None
+    return v.toArray().tolist()
 
 
-def make_hash_embedding(tokens):
-    if not tokens:
-        return [0.0] * DIM
-    vecs = [token_to_vector(t) for t in tokens]
-    n = len(vecs)
-    return [sum(v[i] for v in vecs) / n for i in range(DIM)]
-
-
-hash_embedding_udf = udf(make_hash_embedding, ArrayType(DoubleType()))
+vector_to_array_udf = udf(vector_to_array, ArrayType(DoubleType()))
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate note embeddings using hash-based approach (no training needed)"
+        description="Generate note embeddings using trained Word2Vec model"
     )
     parser.add_argument("env", choices=["local", "hdfs"])
     parser.add_argument("--dim", type=int, default=128)
@@ -49,7 +34,7 @@ def main():
     log(f"[INFO] Starting note_embeddings job in {args.env.upper()} mode")
     log(f"[INFO] Dimension: {args.dim}")
 
-    builder = SparkSession.builder.appName("NLP_NoteEmbeddings_Hash")
+    builder = SparkSession.builder.appName("NLP_NoteEmbeddings")
     if args.env == "local":
         builder = builder.master("local[*]")
     builder = builder.config("spark.sql.shuffle.partitions", "200")
@@ -59,6 +44,7 @@ def main():
     start_time = time.time()
 
     input_path = f"{base_path}/silver/notes_clean"
+    model_path = f"{base_path}/silver/word2vec_model"
     output_path = f"{base_path}/silver/note_embeddings"
 
     log(f"[STEP 1/4] Reading clean notes from: {input_path}")
@@ -74,23 +60,35 @@ def main():
     valid_count = df_valid.count()
     log(f"[METRIC] Notes with valid tokens: {valid_count}")
 
-    log(f"[STEP 3/4] Generating {args.dim}-dim hash embeddings (no training needed)...")
+    log(
+        f"[STEP 3/4] Loading Word2Vec model and generating {args.dim}-dim embeddings..."
+    )
     t1 = time.time()
-    df_emb = df_valid.withColumn("note_embedding", hash_embedding_udf(col("tokens")))
-    df_emb = df_emb.select("hadm_id", "note_embedding")
+    model = Word2VecModel.load(model_path)
+    df_emb = model.transform(df_valid)
 
-    emb_count = df_emb.count()
+    # Flatten VectorUDT into separate columns note_emb_1, note_emb_2 ...
+    df_emb = df_emb.withColumn("emb_array", vector_to_array_udf(col("note_embedding")))
+
+    select_cols = ["hadm_id"] + [
+        col("emb_array").getItem(i).alias(f"note_emb_{i + 1}") for i in range(args.dim)
+    ]
+    df_emb_final = df_emb.select(*select_cols)
+
+    emb_count = df_emb_final.count()
     t2 = time.time()
     log(f"[METRIC] Embeddings generated: {emb_count} in {t2 - t1:.1f}s")
 
     log("[STEP 3b/4] Verifying sample embeddings...")
-    rows = df_emb.limit(3).collect()
+    rows = df_emb_final.limit(3).collect()
     for r in rows:
-        vec = r["note_embedding"]
-        log(f"  hadm_id={r['hadm_id']}, dim={len(vec)}, sample_vec={vec[:5]}")
+        vec = [r[f"note_emb_{i + 1}"] for i in range(5)]
+        log(f"  hadm_id={r['hadm_id']}, sample_vec={vec}")
 
     log(f"[STEP 4/4] Writing note embeddings to: {output_path}")
-    df_emb.write.mode("overwrite").option("compression", "snappy").parquet(output_path)
+    df_emb_final.write.mode("overwrite").option("compression", "snappy").parquet(
+        output_path
+    )
 
     elapsed = time.time() - start_time
     log(f"[METRIC] Total elapsed time: {elapsed:.1f}s")

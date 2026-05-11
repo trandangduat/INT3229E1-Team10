@@ -260,11 +260,11 @@ def main():
         output_path
     )
 
-    final_count = df_silver.count()
-    print(f"[METRIC] Clean notes count: {final_count}")
-
     print(f"[INFO] Reading back for validation metrics...")
     df_written = spark.read.parquet(output_path)
+
+    final_count = df_written.count()
+    print(f"[METRIC] Clean notes count: {final_count}")
 
     token_stats = df_written.select("token_count").summary(
         "min", "25%", "50%", "75%", "max"
@@ -280,11 +280,6 @@ def main():
             .count()
         )
         print(f"[METRIC] Admissions with clean notes: {admission_count}")
-
-    print(f"[INFO] Writing clean notes to: {output_path}")
-    df_silver.write.mode("overwrite").option("compression", "snappy").parquet(
-        output_path
-    )
 
     print("[INFO] notes_clean job completed successfully!")
     spark.stop()
