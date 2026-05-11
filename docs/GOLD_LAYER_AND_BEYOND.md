@@ -319,8 +319,8 @@ df.write.mode("overwrite").partitionBy("split").option("compression", "snappy").
 |--------|------|--------|-----------|
 | 1 | Gold skeleton (admissions + vitals + labs + diagnoses) | `build_gold_dataset.py` | ✅ Hoàn thành |
 | 2 | Tính `event_flag_readmission` | `silver_admissions.py` | ✅ Hoàn thành |
-| 3 | Tạo `silver/note_embeddings` | `train_word2vec.py` + `note_embeddings.py` | ⏳ Chờ Word2Vec |
-| 4 | Append note embeddings vào Gold | `build_gold_dataset.py --include-notes` | ⏳ Chờ bước 3 |
+| 3 | Tạo `silver/note_embeddings` | `train_word2vec.py` + `note_embeddings.py` | ✅ Hoàn thành |
+| 4 | Append note embeddings vào Gold | `build_gold_dataset.py --include-notes` | ✅ Hoàn thành |
 | 5 | Union eICU vào Gold | `build_gold_dataset.py --include-eicu` | ✅ Hoàn thành |
 | 6 | Sửa `temp_mean` giữ nguyên Fahrenheit | `silver_vitals_mimic.py` | ⏳ Cần sửa |
 
@@ -330,7 +330,7 @@ Sau khi chạy `build_gold_dataset.py` trên production:
 
 ```text
 - Số dòng: 592,124 (391,265 MIMIC + 200,859 eICU)
-- Số cột: 59 (8 base + 6 vitals + 23 labs + 21 ICD chapters + 1 split)
+- Số cột: 187 (8 base + 6 vitals + 23 labs + 21 ICD chapters + 128 note embeddings + 1 split)
 - Tỷ lệ event_flag_readmission: 19.28% (MIMIC)
 - Tỷ lệ event_flag_mortality: 2.06% (MIMIC), 5.43% (eICU)
 - Missing rate vitals: 76.43% (chỉ ICU có monitor)
@@ -561,7 +561,7 @@ df_val = spark.read.parquet("gold/analytical_dataset").filter(col("split") == "v
 ### Silver Layer – Đã sửa
 - [ ] `temp_mean` giữ nguyên Fahrenheit (hiện đang convert sang Celsius)
 - [x] Tính `event_flag_readmission` (30-day readmission) – Production: 19.28%
-- [ ] Tạo `silver/note_embeddings` (Word2Vec 128-dim)
+- [x] Tạo `silver/note_embeddings` (Word2Vec 128-dim, vocab_size 35660)
 
 ### Gold Layer ✅
 - [x] `build_gold_dataset.py` – skeleton (admissions + vitals + labs + diagnoses)
@@ -569,7 +569,7 @@ df_val = spark.read.parquet("gold/analytical_dataset").filter(col("split") == "v
 - [x] One-hot ICD chapters (21 chapters, ICD-9 + ICD-10)
 - [x] Temporal split (train/val/test) – percentile-based 70/15/15
 - [x] Union eICU (`--include-eicu` flag)
-- [x] Append note embeddings (`--include-notes` flag, chờ Word2Vec)
+- [x] Append note embeddings (`--include-notes` flag, output tại `analytical_dataset_with_notes`)
 - [x] Validate Gold dataset – production PASS
 
 ### Gold Layer Production Results
@@ -578,7 +578,7 @@ df_val = spark.read.parquet("gold/analytical_dataset").filter(col("split") == "v
 | Total rows | 592,124 |
 | MIMIC rows | 391,265 |
 | eICU rows | 200,859 |
-| Total columns | 59 |
+| Total columns | 187 (đã kèm 128 cột note embeddings) |
 | Distinct hadm_id | 592,124 (no duplicates) |
 
 **Temporal Split (percentile-based 70/15/15):**
@@ -626,4 +626,4 @@ df_val = spark.read.parquet("gold/analytical_dataset").filter(col("split") == "v
 
 ---
 
-*Tài liệu được tạo tự động từ kết quả pipeline thực tế. Cập nhật lần cuối: 2026-05-07 (Gold Layer production completed).*
+*Tài liệu được tạo tự động từ kết quả pipeline thực tế. Cập nhật lần cuối: 2026-05-11 (Gold Layer với Note Embeddings production completed).*

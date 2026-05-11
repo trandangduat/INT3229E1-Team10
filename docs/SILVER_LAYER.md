@@ -557,6 +557,8 @@ Trạng thái triển khai:
 *   **Đã chạy production trên HDFS thành công.**
 *   **Production metrics: raw notes `331,793`, clean notes `331,793`, admissions with notes `331,793`.**
 *   **Token count distribution: min `18`, 25% `760`, 50% `1017`, 75% `1322`, max `5938`.**
+*   **Đã Train Word2Vec thành công (vocab size: 35,660).**
+*   **Đã sinh Note Embeddings thành công (128 chiều) và ghi xuống HDFS.**
 *   **`validate_silver.py` PASS: `_SUCCESS`, required columns, required non-null, hadm_id subset of admissions.**
 
 Lệnh chạy production trên VM/HDFS:
@@ -650,16 +652,16 @@ Gold logic:
 *   One-hot ICD chapters (21 chapters: ICD-9 + ICD-10 mapped to unified chapter system).
 *   Temporal split bằng `approxQuantile(70%, 85%)` trên de-identified years.
 *   Optional: Union eICU harmonized vào `test_external` split.
-*   Optional: Left join note embeddings (khi Word2Vec hoàn tất).
+*   Optional: Left join note embeddings (Đã hoàn tất Word2Vec và sinh 128 cột vector).
 *   Partition output theo `split`.
 
 Output dự kiến:
 
 ```text
-/data/gold/analytical_dataset/split=train/       (277,735 rows)
-/data/gold/analytical_dataset/split=val/          (58,693 rows)
-/data/gold/analytical_dataset/split=test/         (54,837 rows)
-/data/gold/analytical_dataset/split=test_external/ (200,859 rows)
+/data/gold/analytical_dataset_with_notes/split=train/       (277,735 rows)
+/data/gold/analytical_dataset_with_notes/split=val/          (58,693 rows)
+/data/gold/analytical_dataset_with_notes/split=test/         (54,837 rows)
+/data/gold/analytical_dataset_with_notes/split=test_external/ (200,859 rows)
 ```
 
 ---
