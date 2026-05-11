@@ -19,15 +19,20 @@ def main():
         "env", choices=["local", "hdfs"], help="Execution environment (local or hdfs)"
     )
     parser.add_argument("--vector-size", type=int, default=128)
-    parser.add_argument("--min-count", type=int, default=5)
+    parser.add_argument(
+        "--min-count", type=int, default=50
+    )  # Tăng lên 50 để loại bỏ typo và giảm vocab
     parser.add_argument("--window-size", type=int, default=5)
     parser.add_argument("--max-iter", type=int, default=1)
+    parser.add_argument(
+        "--num-partitions", type=int, default=16
+    )  # Cấu hình số partition cho thuật toán
     args = parser.parse_args()
 
     base_path = "data" if args.env == "local" else "hdfs://master10:9000/user/dis/data"
     log(f"[INFO] Starting train_word2vec job in {args.env.upper()} mode")
     log(
-        f"[INFO] vectorSize={args.vector_size}, minCount={args.min_count}, windowSize={args.window_size}, maxIter={args.max_iter}"
+        f"[INFO] vectorSize={args.vector_size}, minCount={args.min_count}, windowSize={args.window_size}, maxIter={args.max_iter}, numPartitions={args.num_partitions}"
     )
 
     builder = SparkSession.builder.appName("NLP_TrainWord2Vec")
@@ -52,6 +57,9 @@ def main():
     valid_count = df_tokens.count()
     log(f"[METRIC] Notes with valid tokens: {valid_count}")
 
+    # Repartition để chống lại Data Skew (Straggler Tasks)
+    df_tokens = df_tokens.repartition(200)
+
     log("[INFO] Training Word2Vec... (this may take a few minutes)")
     log("[INFO] Check progress at http://master10:4040 → Stages tab")
 
@@ -61,6 +69,9 @@ def main():
         minCount=args.min_count,
         windowSize=args.window_size,
         maxIter=args.max_iter,
+        numPartitions=args.num_partitions,  # Ép Spark chia nhỏ tính toán cho các core
+        stepSize=0.05,  # Tăng learning rate để học nhanh hơn
+        maxSentenceLength=500,  # Giới hạn độ dài tối đa để tránh nghẽn
         inputCol="tokens",
         outputCol="note_embedding",
         seed=42,
