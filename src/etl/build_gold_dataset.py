@@ -6,6 +6,7 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     avg,
     col,
+    concat_ws,
     count,
     countDistinct,
     first,
@@ -188,6 +189,11 @@ def main():
         default=False,
         help="Left join note embeddings (requires silver/note_embeddings)",
     )
+    parser.add_argument(
+        "--output-suffix",
+        default="",
+        help="Suffix for output path (e.g. '_v2' writes to gold/analytical_dataset_v2)",
+    )
     args = parser.parse_args()
 
     base_path = "data" if args.env == "local" else "hdfs://master10:9000/user/dis/data"
@@ -195,6 +201,7 @@ def main():
     print(f"[INFO] Base path: {base_path}")
     print(f"[INFO] Include eICU: {args.include_eicu}")
     print(f"[INFO] Include notes: {args.include_notes}")
+    print(f"[INFO] Output suffix: '{args.output_suffix}'")
 
     builder = SparkSession.builder.appName("GoldLayer_BuildDataset")
     if args.env == "local":
@@ -239,9 +246,13 @@ def main():
         "sbp_mean",
         "sbp_min",
         "sbp_max",
+        "sbp_count",
         "spo2_mean",
+        "spo2_count",
         "hr_mean",
+        "hr_count",
         "temperature_mean",
+        "temperature_count",
     ]
     try:
         if has_parquet_files(spark, vitals_path):
@@ -250,9 +261,13 @@ def main():
                 col("sbp_mean"),
                 col("sbp_min"),
                 col("sbp_max"),
+                col("sbp_count"),
                 col("spo2_mean"),
+                col("spo2_count"),
                 col("hr_mean"),
+                col("hr_count"),
                 col("temperature_mean"),
+                col("temperature_count"),
             )
             vitals_count = df_vitals.count()
             print(f"[METRIC] Vitals rows: {vitals_count}")
@@ -287,9 +302,9 @@ def main():
             df = df.withColumn(vc, lit(None).cast("double"))
 
     # ──────────────────────────────────────────────
-    # STEP 3: Pivot labs from long → wide, left join
+    # STEP 3: Pivot labs from long → wide (mean + min + max), left join
     # ──────────────────────────────────────────────
-    print("\n[STEP 3] Pivoting labs (long → wide) and left joining...")
+    print("\n[STEP 3] Pivoting labs (long → wide, mean/min/max) and left joining...")
     labs_path = f"{base_path}/silver/labs_agg"
     try:
         if has_parquet_files(spark, labs_path):
@@ -297,6 +312,8 @@ def main():
                 col("hadm_id").cast("long").alias("hadm_id"),
                 col("lab_name"),
                 col("lab_mean"),
+                col("lab_min"),
+                col("lab_max"),
             )
             labs_count = df_labs.count()
             labs_admissions = df_labs.select("hadm_id").distinct().count()
@@ -310,37 +327,59 @@ def main():
             lab_names.sort()
             print(f"[METRIC] Lab features ({len(lab_names)}): {lab_names}")
 
+            df_labs_mean = df_labs.select(
+                "hadm_id",
+                concat_ws("_", col("lab_name"), lit("mean")).alias("feature_name"),
+                col("lab_mean").alias("value"),
+            )
+            df_labs_min = df_labs.select(
+                "hadm_id",
+                concat_ws("_", col("lab_name"), lit("min")).alias("feature_name"),
+                col("lab_min").alias("value"),
+            )
+            df_labs_max = df_labs.select(
+                "hadm_id",
+                concat_ws("_", col("lab_name"), lit("max")).alias("feature_name"),
+                col("lab_max").alias("value"),
+            )
+            df_labs_stacked = df_labs_mean.unionAll(df_labs_min).unionAll(df_labs_max)
+
             df_labs_wide = (
-                df_labs.groupBy("hadm_id").pivot("lab_name").agg(first("lab_mean"))
+                df_labs_stacked.groupBy("hadm_id")
+                .pivot("feature_name")
+                .agg(first("value"))
             )
             df_labs_wide_count = df_labs_wide.count()
             print(f"[METRIC] Labs wide-format rows: {df_labs_wide_count}")
+            print(f"[METRIC] Labs wide-format columns: {len(df_labs_wide.columns) - 1}")
 
             df = df.join(df_labs_wide, on="hadm_id", how="left")
             join_count = df.count()
             print(f"[METRIC] Row count after labs join: {join_count}")
 
-            missing_labs = (
-                df.agg(
-                    sum(col(lab_names[0]).isNull().cast("int")).alias("missing")
+            sample_lab = f"{lab_names[0]}_mean" if lab_names else None
+            if sample_lab and sample_lab in df.columns:
+                missing_labs = df.agg(
+                    sum(col(sample_lab).isNull().cast("int")).alias("missing")
                 ).collect()[0]["missing"]
-                if lab_names
-                else 0
-            )
-            print(
-                f"[METRIC] Missing first lab ({lab_names[0] if lab_names else 'N/A'}): "
-                f"{missing_labs}/{base_count}"
-            )
+                print(
+                    f"[METRIC] Missing first lab ({sample_lab}): "
+                    f"{missing_labs}/{base_count}"
+                )
         else:
             print(
                 f"[WARN] No parquet files found at {labs_path}, adding null lab columns"
             )
             for ln in EXPECTED_LAB_NAMES:
-                df = df.withColumn(ln, lit(None).cast("double"))
+                df = df.withColumn(f"{ln}_mean", lit(None).cast("double"))
+                df = df.withColumn(f"{ln}_min", lit(None).cast("double"))
+                df = df.withColumn(f"{ln}_max", lit(None).cast("double"))
     except Exception as exc:
         print(f"[WARN] Labs data not available, adding null columns: {exc}")
         for ln in EXPECTED_LAB_NAMES:
-            df = df.withColumn(ln, lit(None).cast("double"))
+            df = df.withColumn(f"{ln}_mean", lit(None).cast("double"))
+            df = df.withColumn(f"{ln}_min", lit(None).cast("double"))
+            df = df.withColumn(f"{ln}_max", lit(None).cast("double"))
 
     # ──────────────────────────────────────────────
     # STEP 4: One-hot ICD chapters, left join
@@ -465,9 +504,13 @@ def main():
                 col("sbp_mean"),
                 col("sbp_min"),
                 col("sbp_max"),
+                col("sbp_count"),
                 col("spo2_mean"),
+                col("spo2_count"),
                 col("hr_mean"),
+                col("hr_count"),
                 col("temperature_mean"),
+                col("temperature_count"),
             )
 
             for c in df.columns:
@@ -514,7 +557,7 @@ def main():
     # STEP 8: Drop intermediate columns, write output
     # ──────────────────────────────────────────────
     print("\n[STEP 8] Writing Gold dataset...")
-    output_path = f"{base_path}/gold/analytical_dataset"
+    output_path = f"{base_path}/gold/analytical_dataset{args.output_suffix}"
 
     df_output = df.drop("admittime", "dischtime")
 
