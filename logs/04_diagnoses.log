@@ -1,0 +1,36 @@
+2026-05-16 16:42:49,127	INFO worker.py:1772 -- Started a local Ray instance. View the dashboard at [1m[32m127.0.0.1:8267 [39m[22m
+2026-05-16 16:42:51,007	INFO streaming_executor.py:108 -- Starting execution of Dataset. Full logs are in /tmp/ray/session_2026-05-16_16-42-47_273253_1223552/logs/ray-data
+2026-05-16 16:42:51,007	INFO streaming_executor.py:109 -- Execution plan of Dataset: InputDataBuffer[Input] -> TaskPoolMapOperator[ReadParquet]
+2026-05-16 16:42:51,241	INFO streaming_executor.py:108 -- Starting execution of Dataset. Full logs are in /tmp/ray/session_2026-05-16_16-42-47_273253_1223552/logs/ray-data
+2026-05-16 16:42:51,241	INFO streaming_executor.py:109 -- Execution plan of Dataset: InputDataBuffer[Input] -> TaskPoolMapOperator[ReadCSV] -> TaskPoolMapOperator[MapBatches(select_columns)]
+2026-05-16 16:43:03,151	INFO streaming_executor.py:108 -- Starting execution of Dataset. Full logs are in /tmp/ray/session_2026-05-16_16-42-47_273253_1223552/logs/ray-data
+2026-05-16 16:43:03,151	INFO streaming_executor.py:109 -- Execution plan of Dataset: InputDataBuffer[Input] -> TaskPoolMapOperator[ReadCSV] -> TaskPoolMapOperator[MapBatches(select_columns)]
+2026-05-16 16:43:32,258	INFO streaming_executor.py:108 -- Starting execution of Dataset. Full logs are in /tmp/ray/session_2026-05-16_16-42-47_273253_1223552/logs/ray-data
+2026-05-16 16:43:32,258	INFO streaming_executor.py:109 -- Execution plan of Dataset: InputDataBuffer[Input] -> TaskPoolMapOperator[Write]
+[INFO] Ray cluster resources: {'node:__internal_head__': 1.0, 'node:172.17.22.13': 1.0, 'GPU': 1.0, 'CPU': 20.0, 'object_store_memory': 16308307968.0, 'memory': 32616615936.0, 'accelerator_type:G': 1.0}
+
+[STEP 4.1] Loading label_table ...
+[dataset]: Run `pip install tqdm` to enable progress reporting.
+[METRIC] Valid hadm_ids: 331308
+[TIMER] [load_label] elapsed=1.25s | RAM used=14.87 GB | RAM percent=27.3%
+
+[STEP 4.2] Reading diagnoses_icd.csv ...
+[METRIC] Raw diagnoses rows: 4756326
+[TIMER] [read_diagnoses] elapsed=11.92s | RAM used=16.27 GB | RAM percent=29.8%
+
+[STEP 4.3] Mapping ICD codes → chapter numbers ...
+[METRIC] Diagnoses rows in cohort: 4138810
+[METRIC] Chapters present: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
+[TIMER] [map_icd_chapters] elapsed=27.78s | RAM used=17.31 GB | RAM percent=31.7%
+
+[STEP 4.4] One-hot encoding ICD chapters ...
+[METRIC] Admissions with diagnoses: 330910
+[METRIC] ICD chapter columns: 21
+[TIMER] [onehot_icd] elapsed=1.25s | RAM used=17.29 GB | RAM percent=31.7%
+
+[STEP 4.5] Writing diagnoses_onehot ...
+[TIMER] [write_diagnoses] elapsed=2.17s | RAM used=17.39 GB | RAM percent=31.8%
+
+[RESULT] diagnoses_onehot written to: /home/anhtt/Downloads/code/Project/outputs/diagnoses_onehot
+[RESULT] Rows: 330910 | Columns: 22
+[TIMER] [TOTAL step 04] elapsed=44.37s | RAM used=17.39 GB | RAM percent=31.8%

@@ -1,0 +1,41 @@
+2026-05-16 16:42:40,427	INFO worker.py:1772 -- Started a local Ray instance. View the dashboard at [1m[32m127.0.0.1:8265 [39m[22m
+2026-05-16 16:42:42,248	INFO streaming_executor.py:108 -- Starting execution of Dataset. Full logs are in /tmp/ray/session_2026-05-16_16-42-38_931129_1220087/logs/ray-data
+2026-05-16 16:42:42,248	INFO streaming_executor.py:109 -- Execution plan of Dataset: InputDataBuffer[Input] -> TaskPoolMapOperator[ReadParquet]
+2026-05-16 16:42:42,556	INFO streaming_executor.py:108 -- Starting execution of Dataset. Full logs are in /tmp/ray/session_2026-05-16_16-42-38_931129_1220087/logs/ray-data
+2026-05-16 16:42:42,556	INFO streaming_executor.py:109 -- Execution plan of Dataset: InputDataBuffer[Input] -> TaskPoolMapOperator[ReadCSV->MapBatches(select_columns)]
+2026-05-16 16:53:43,107	INFO streaming_executor.py:108 -- Starting execution of Dataset. Full logs are in /tmp/ray/session_2026-05-16_16-42-38_931129_1220087/logs/ray-data
+2026-05-16 16:53:43,172	INFO streaming_executor.py:109 -- Execution plan of Dataset: InputDataBuffer[Input] -> TaskPoolMapOperator[ReadCSV->MapBatches(select_columns)->MapBatches(filter_and_tag_vitals)]
+2026-05-16 17:05:56,277	INFO streaming_executor.py:108 -- Starting execution of Dataset. Full logs are in /tmp/ray/session_2026-05-16_16-42-38_931129_1220087/logs/ray-data
+2026-05-16 17:05:56,277	INFO streaming_executor.py:109 -- Execution plan of Dataset: InputDataBuffer[Input] -> TaskPoolMapOperator[ReadCSV->MapBatches(select_columns)->MapBatches(filter_and_tag_vitals)]
+2026-05-16 17:18:52,842	INFO streaming_executor.py:108 -- Starting execution of Dataset. Full logs are in /tmp/ray/session_2026-05-16_16-42-38_931129_1220087/logs/ray-data
+2026-05-16 17:18:52,842	INFO streaming_executor.py:109 -- Execution plan of Dataset: InputDataBuffer[Input] -> TaskPoolMapOperator[Write]
+[INFO] Ray cluster resources: {'GPU': 1.0, 'memory': 35092819968.0, 'accelerator_type:G': 1.0, 'node:__internal_head__': 1.0, 'CPU': 20.0, 'node:172.17.22.13': 1.0, 'object_store_memory': 17546409984.0}
+
+[STEP 2.1] Loading label_table for admission times ...
+[dataset]: Run `pip install tqdm` to enable progress reporting.
+[METRIC] Valid hadm_ids from label table: 331308
+[TIMER] [load_label_table] elapsed=1.43s | RAM used=10.04 GB | RAM percent=19.5%
+
+[STEP 2.2] Reading chartevents.csv (full dataset) ...
+[METRIC] Raw chartevents rows: 313645063
+[TIMER] [read_chartevents] elapsed=660.54s | RAM used=10.43 GB | RAM percent=20.5%
+
+[STEP 2.3] Filtering by vital itemids + cleaning ...
+[METRIC] Rows after vital filter + 24h window: 3792790
+[TIMER] [filter_vitals] elapsed=733.19s | RAM used=11.00 GB | RAM percent=21.5%
+
+[STEP 2.4] Aggregating vitals to wide format ...
+[METRIC] Admissions with vitals: 51224
+[METRIC] Vitals columns: ['hr_count', 'sbp_count', 'spo2_count', 'temperature_count', 'hr_max', 'sbp_max', 'spo2_max', 'temperature_max', 'hr_mean', 'sbp_mean', 'spo2_mean', 'temperature_mean', 'hr_min', 'sbp_min', 'spo2_min', 'temperature_min']
+[METRIC] Coverage sbp: 50980/51224 (99.5%)
+[METRIC] Coverage spo2: 51165/51224 (99.9%)
+[METRIC] Coverage hr: 51199/51224 (100.0%)
+[METRIC] Coverage temperature: 49959/51224 (97.5%)
+[TIMER] [aggregate_vitals] elapsed=776.31s | RAM used=9.94 GB | RAM percent=19.8%
+
+[STEP 2.5] Writing vitals_agg ...
+[TIMER] [write_vitals] elapsed=0.39s | RAM used=9.95 GB | RAM percent=19.8%
+
+[RESULT] vitals_agg written to: /home/anhtt/Downloads/code/Project/outputs/vitals_agg
+[RESULT] Rows: 51224 | Columns: 17
+[TIMER] [TOTAL step 02] elapsed=2171.86s | RAM used=9.95 GB | RAM percent=19.8%

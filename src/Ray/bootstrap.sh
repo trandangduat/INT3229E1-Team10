@@ -42,7 +42,7 @@ conda activate "${CONDA_ENV}"
 echo "[INFO] Installing Python packages ..."
 pip install -q --upgrade pip
 pip install -q \
-    "ray[data,train,tune,serve]==2.10.0" \
+    "ray[data,train,tune,serve]==2.9.3" \
     pandas \
     pyarrow \
     scikit-learn \

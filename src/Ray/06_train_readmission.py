@@ -37,7 +37,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from utils import start_timer, log_stage
 
 # ─── Ray Init ──────────────────────────────────────────────────────────────
-ray.init(address="auto", ignore_reinit_error=True)
+ray.init(ignore_reinit_error=True)
 print(f"[INFO] Ray cluster resources: {ray.cluster_resources()}")
 
 t_total = start_timer()

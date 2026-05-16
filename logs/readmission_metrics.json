@@ -1,0 +1,15 @@
+{
+  "task": "30-day readmission",
+  "train_auc": 0.7205,
+  "val_auc": 0.6796,
+  "test_auc": 0.6611,
+  "best_iteration": 189,
+  "train_rows": 235441,
+  "val_rows": 49738,
+  "test_rows": 46129,
+  "feature_count": 108,
+  "train_readmission_rate_pct": 18.16,
+  "val_readmission_rate_pct": 18.34,
+  "test_readmission_rate_pct": 18.74,
+  "train_time_seconds": 3.7
+}

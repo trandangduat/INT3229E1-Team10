@@ -1,0 +1,47 @@
+2026-05-16 16:42:45,133	INFO worker.py:1772 -- Started a local Ray instance. View the dashboard at [1m[32m127.0.0.1:8266 [39m[22m
+2026-05-16 16:42:46,765	INFO streaming_executor.py:108 -- Starting execution of Dataset. Full logs are in /tmp/ray/session_2026-05-16_16-42-43_102628_1221780/logs/ray-data
+2026-05-16 16:42:46,765	INFO streaming_executor.py:109 -- Execution plan of Dataset: InputDataBuffer[Input] -> TaskPoolMapOperator[ReadParquet]
+2026-05-16 16:42:47,036	INFO streaming_executor.py:108 -- Starting execution of Dataset. Full logs are in /tmp/ray/session_2026-05-16_16-42-43_102628_1221780/logs/ray-data
+2026-05-16 16:42:47,036	INFO streaming_executor.py:109 -- Execution plan of Dataset: InputDataBuffer[Input] -> TaskPoolMapOperator[ReadCSV] -> TaskPoolMapOperator[MapBatches(select_columns)]
+2026-05-16 16:45:36,109	INFO streaming_executor.py:108 -- Starting execution of Dataset. Full logs are in /tmp/ray/session_2026-05-16_16-42-43_102628_1221780/logs/ray-data
+2026-05-16 16:45:36,251	INFO streaming_executor.py:109 -- Execution plan of Dataset: InputDataBuffer[Input] -> TaskPoolMapOperator[ReadCSV] -> TaskPoolMapOperator[MapBatches(select_columns)->MapBatches(filter_labs)]
+2026-05-16 16:48:21,941	INFO streaming_executor.py:108 -- Starting execution of Dataset. Full logs are in /tmp/ray/session_2026-05-16_16-42-43_102628_1221780/logs/ray-data
+2026-05-16 16:48:21,941	INFO streaming_executor.py:109 -- Execution plan of Dataset: InputDataBuffer[Input] -> TaskPoolMapOperator[ReadCSV] -> TaskPoolMapOperator[MapBatches(select_columns)->MapBatches(filter_labs)]
+2026-05-16 16:51:02,836	INFO streaming_executor.py:108 -- Starting execution of Dataset. Full logs are in /tmp/ray/session_2026-05-16_16-42-43_102628_1221780/logs/ray-data
+2026-05-16 16:51:02,867	INFO streaming_executor.py:109 -- Execution plan of Dataset: InputDataBuffer[Input] -> TaskPoolMapOperator[Write]
+[INFO] Ray cluster resources: {'node:__internal_head__': 1.0, 'node:172.17.22.13': 1.0, 'GPU': 1.0, 'memory': 33983737038.0, 'object_store_memory': 16991868518.0, 'accelerator_type:G': 1.0, 'CPU': 20.0}
+
+[STEP 3.1] Loading label_table for admission window ...
+[dataset]: Run `pip install tqdm` to enable progress reporting.
+[METRIC] Valid hadm_ids: 331308
+[TIMER] [load_label] elapsed=1.14s | RAM used=12.11 GB | RAM percent=22.6%
+
+[STEP 3.2] Reading labevents.csv (full dataset) ...
+[METRIC] Raw labevents rows: 118171367
+[TIMER] [read_labevents] elapsed=169.10s | RAM used=13.52 GB | RAM percent=25.8%
+
+[STEP 3.3] Filtering labevents ...
+[METRIC] Lab rows after filter + 24h window: 6362813
+[TIMER] [filter_labs] elapsed=165.85s | RAM used=13.80 GB | RAM percent=26.2%
+
+[STEP 3.4] Aggregating labs to wide format ...
+[METRIC] Admissions with labs: 276106
+[METRIC] Lab feature columns: 69
+[METRIC] hematocrit_mean: 263341/276106 (95.4%)
+[METRIC] hemoglobin_mean: 258083/276106 (93.5%)
+[METRIC] platelet_mean: 258752/276106 (93.7%)
+[METRIC] wbc_mean: 258110/276106 (93.5%)
+[METRIC] creatinine_mean: 253256/276106 (91.7%)
+[METRIC] bun_mean: 250998/276106 (90.9%)
+[METRIC] sodium_mean: 250329/276106 (90.7%)
+[METRIC] potassium_mean: 252198/276106 (91.3%)
+[METRIC] chloride_mean: 250822/276106 (90.8%)
+[METRIC] bicarbonate_mean: 249105/276106 (90.2%)
+[TIMER] [aggregate_labs] elapsed=160.84s | RAM used=14.81 GB | RAM percent=27.9%
+
+[STEP 3.5] Writing labs_agg ...
+[TIMER] [write_labs] elapsed=0.85s | RAM used=14.83 GB | RAM percent=27.9%
+
+[RESULT] labs_agg written to: /home/anhtt/Downloads/code/Project/outputs/labs_agg
+[RESULT] Rows: 276106 | Columns: 70
+[TIMER] [TOTAL step 03] elapsed=497.78s | RAM used=14.83 GB | RAM percent=27.9%

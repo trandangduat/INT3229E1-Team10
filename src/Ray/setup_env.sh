@@ -35,7 +35,7 @@ pip install --upgrade pip
 # Install packages
 echo "[INFO] Installing packages ..."
 pip install \
-    "ray[data,train,tune,serve]==2.10.0" \
+    "ray[data,train,tune,serve]==2.9.3" \
     pandas \
     pyarrow \
     scikit-learn \

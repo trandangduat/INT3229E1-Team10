@@ -54,15 +54,39 @@ echo "=========================================="
 
 # ─── Start Ray (single-node) ─────────────────────────────────────────────────
 echo ""
-echo "[INFO] Starting Ray (single-node) ..."
-ray stop 2>/dev/null || true
-ray start --head \
-    --port=6379 \
-    --dashboard-host=127.0.0.1 \
-    --dashboard-port=8265 \
-    --num-gpus=$(nvidia-smi -L 2>/dev/null | wc -l || echo 0)
+echo "[INFO] Starting Ray (single-node) via Python ray.init() ..."
 
-echo "[INFO] Ray Dashboard: http://127.0.0.1:8265"
+# Stop any stale Ray processes first (best-effort)
+python -c "import ray; ray.shutdown()" 2>/dev/null || true
+
+# Start Ray head node via Python — avoids the ray CLI deepcopy bug
+python - <<'PYEOF'
+import ray, socket, os, sys
+
+# Detect GPU count
+try:
+    import subprocess
+    gpu_count = int(subprocess.check_output(
+        ["nvidia-smi", "-L"], stderr=subprocess.DEVNULL
+    ).decode().strip().count("\n")) + 1
+except Exception:
+    gpu_count = 0
+
+ray.init(
+    ignore_reinit_error=True,
+    num_gpus=gpu_count,
+    dashboard_host="127.0.0.1",
+    dashboard_port=8265,
+    include_dashboard=True,
+)
+
+resources = ray.cluster_resources()
+print(f"[INFO] Ray started on host: {socket.gethostname()}")
+print(f"[INFO] Cluster resources: {resources}")
+print(f"[INFO] Ray Dashboard: http://127.0.0.1:8265")
+ray.shutdown()
+PYEOF
+
 echo ""
 
 # ─── Run pipeline steps ─────────────────────────────────────────────────────

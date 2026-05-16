@@ -54,7 +54,7 @@ VITAL_RANGES = {
 ALL_ITEMIDS = list(VITAL_ITEMIDS.keys())
 
 # ─── Ray Init ──────────────────────────────────────────────────────────────
-ray.init(address="auto", ignore_reinit_error=True)
+ray.init(ignore_reinit_error=True)
 print(f"[INFO] Ray cluster resources: {ray.cluster_resources()}")
 
 t_total = start_timer()

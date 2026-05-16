@@ -61,7 +61,7 @@ ALL_LAB_ITEMIDS = [iid for ids in LAB_ITEMIDS.values() for iid in ids]
 ITEMID_TO_LABNAME = {iid: name for name, ids in LAB_ITEMIDS.items() for iid in ids}
 
 # ─── Ray Init ──────────────────────────────────────────────────────────────
-ray.init(address="auto", ignore_reinit_error=True)
+ray.init(ignore_reinit_error=True)
 print(f"[INFO] Ray cluster resources: {ray.cluster_resources()}")
 
 t_total = start_timer()
