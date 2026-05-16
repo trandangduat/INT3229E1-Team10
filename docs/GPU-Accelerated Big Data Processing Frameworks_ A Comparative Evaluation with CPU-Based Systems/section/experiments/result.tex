@@ -1,0 +1,102 @@
+\subsection{Kết quả}
+
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.9\linewidth]{figures/regressor.png}
+    \caption{Kết quả của mô hình Regressor so với non ML}
+    \label{fig:regressor}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.45\textwidth]{figures/raw_dips.png}
+  \caption{Các bước sóng chưa qua làm mịn}
+  \label{fig:raw_dips}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.5\textwidth]{figures/gp_ae_dip.png}
+  \caption{Các bước sóng đã qua làm mịn}
+  \label{fig:smoothed_dips}
+\end{figure}
+
+Phương pháp non-ML dự đoán quang phổ và LinearRegression dự đoán độ không chắc chắn
+ cho điểm trên tập valid là 0.75, điểm trên tập test là 0.326. Đạt hạng 56/460 đội (tính đến ngày 9/8/2025).
+
+Với các phương pháp ML cho dự đoán quang phổ,
+
+Chúng tôi thử với mô hình Regressor, lấy thuộc tính là giá trị flux và một số thuộc tính
+của gradient của flux có liên quan mạnh đến độ sâu transit như hình $\ref{fig:regressor}$
+
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.4\textwidth]{figures/non_ml_dip.png}
+  \caption{Các bước sóng dự đoán của mô hình non-ML}
+  \label{fig:non_ml_dip}
+\end{figure}
+
+
+với điểm trên tập valid là 0.734, điểm trên tập test là 0.289, nguyên nhân có thể là do sự khác biệt trong phân phối dữ liệu giữa các tập
+và chọn thuộc tính chưa phù hợp.
+
+
+
+Sự khác biệt về phân phối dữ liệu càng thể hiện rõ hơn khi chúng tôi thử với KNN, với khoảng cách trung bình các điểm dữ liệu trong tập train (với k = 2) là 50.
+Chúng tôi kết hợp KNN và phương pháp non-ML, với điểm dữ liệu trong tập test có khoảng cách với các điểm trong trong KNN dưới 40, chúng tôi nội suy từ tập train, những điểm lớn hơn
+thì chúng tôi sử dụng phương pháp non-ML. Kết quả test là 0.322, có hơn phương pháp non-ML nhưng độ chênh lệch quá nhỏ.
+
+
+
+Chúng tôi cũng thử làm mịn kết quả dự đoán của 283 bước sóng bằng Gaussian Process (GP) và AutoEncoder (AE).
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.5\textwidth]{figures/pca.png}
+  \caption{Các bước sóng đã qua làm mượt bằng PCA}
+  \label{fig:pca_smoothed_dips}
+\end{figure}
+
+Như trong hình ~\ref{fig:raw_dips}, các bước sóng chưa làm mịn có nhiều nhiễu và không đồng nhất. Để cải thiện, chúng tôi đã áp dụng 
+Gaussian Process (GP) và AutoEncoder (AE) để làm mịn, khử nhiễu các bước sóng này. Kết quả là các bước sóng trở nên đồng nhất hơn, 
+như trong hình ~\ref{fig:smoothed_dips}.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.5\textwidth]{figures/ml_catch.png}
+  \caption{Dự đoán của mô hình ML bám sát được hình dạng của ground truth}
+  \label{fig:ml_catch}
+\end{figure}
+
+Đồng thời, GP cũng sinh ra các ước lượng không chắc chắn cho các bước sóng, cho phép chúng tôi đánh giá độ tin cậy $\sigma$ của các dự đoán.
+So với bước sóng được dự đoán bằng phương pháp non-ML , như trong hình ~\ref{fig:non_ml_dip}, các bước sóng này đã sát với ground truth hơn,
+0.00356 so với 0.0024.
+
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.4\textwidth]{figures/non_ml_catch.png}
+  \caption{Dự đoán của mô hình non-ML không bám sát được hình dạng của ground truth}
+  \label{fig:non_ml_catch}
+\end{figure}
+
+Một ý tưởng khác để làm mịn bước sóng là sử dụng PCA tìm ra những component chính của các bước sóng này.
+Kết quả làm mượt bằng PCA cho thấy những tiềm năng của phương pháp này trong việc cải thiện độ chính xác của dự đoán. Bằng việc sử dụng 5 component
+chính, chúng tôi đã đạt được những cải thiện đáng kể trong việc giảm thiểu nhiễu và tăng cường độ chính xác cho các bước sóng dự đoán.
+
+
+
+
+Dù việc sử dụng PCA đã mang lại những cải thiện đáng kể trên valid, nhưng vẫn còn nhiều thách thức trong việc xử lý dữ liệu nhiễu và không đồng nhất. PCA với
+5 component đem lại kết quả thấp trên test set so với valid set có thể do các tập trong test set phân tán hơn, dẫn đến việc mô hình không thể tổng quát tốt hơn 
+cho các bước sóng này.
+
+
+
+
+So với sử dụng mean của toàn bộ quang phổ như non-ML, việc dự đoán từng bước sóng cải thiện việc bắt được cấu trúc của các bước sóng quang phổ phức tạp
+, như hình ~\ref{fig:ml_catch}. So với việc dự đoán từng bước sóng, phương pháp non-ML chỉ cho ra được một giá trị trung bình cho toàn bộ quang phổ,
+như hình ~\ref{fig:non_ml_catch}. Tuy nhiên, việc dự đoán từng bước sóng cũng làm tăng độ nhiễu và độ không đồng nhất của các bước sóng này, dẫn đến việc khó khăn trong việc
+tổng quát khiến những phương pháp chúng tôi thử nghiệm không đạt được kết quả tốt hơn so với non-ML.

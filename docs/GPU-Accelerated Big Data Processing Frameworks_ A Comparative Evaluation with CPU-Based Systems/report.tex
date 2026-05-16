@@ -1,0 +1,60 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage[T5]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[vietnamese]{babel}
+\usepackage{xcolor}
+\usepackage{siunitx}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{listings}
+\usepackage{float}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,fit,calc,backgrounds}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\begin{document}
+
+\title{Evaluating Ray as a Unified Distributed Compute Framework for Large-Scale Healthcare Analytics: An End-to-End Case Study on MIMIC-IV}
+
+\author{
+\IEEEauthorblockN{
+Tran Tuan Anh,
+Tran Dang Duat,
+Nguyen Anh Khang,
+Nguyen Trung Kien,
+Nguyen Van Vuong
+}
+\IEEEauthorblockA{
+\textit{VNU University of Engineering and Technology}\\
+Hanoi, Vietnam}
+}
+
+\maketitle
+
+\begin{abstract}
+Bài báo cáo đánh giá Ray như một nền tảng tính toán phân tán thống nhất cho bài toán phân tích y tế quy mô lớn trong hệ thống PREDICTCARE AI. Bối cảnh nghiên cứu xuất phát từ nhu cầu kết hợp dữ liệu chuỗi thời gian sinh hiệu với hồ sơ nhân khẩu học và nhập viện trong MIMIC-IV để dự báo rủi ro sinh tồn cho bệnh nhân. Các pipeline truyền thống thường bị phân mảnh giữa tầng ETL và tầng học máy, dẫn đến chi phí ghi/đọc đĩa lớn, nguy cơ lỗi tràn bộ nhớ RAM hệ thống trong quá trình kết nối và nén dữ liệu khổng lồ, cũng như sự chậm trễ khi chuyển giao dữ liệu sang môi trường huấn luyện. Để giải quyết vấn đề đó, nghiên cứu thiết kế một pipeline toàn trình dựa trên Ray trên cụm phân tán không đồng nhất gồm head node thiên về CPU, HDFS làm tầng lưu trữ, và edge node sở hữu GPU RTX 3060 12GB. Ray Data được dùng để thực hiện distributed join giữa các bảng \textit{patients}, \textit{admissions} và \textit{chartevents}, sau đó tạo tập Gold Data phục vụ mô hình XGBoost Survival Analysis. Ray Train tiếp nhận trực tiếp tập dữ liệu đặc tả đã được nén mạnh từ phase trước để thực hiện huấn luyện trong bộ nhớ GPU. Kết quả cho thấy cách tiếp cận thống nhất này giúp giảm bottleneck do disk I/O, giải quyết bài toán kết nối dữ liệu phân tán nhiều bảng với mức tiêu thụ RAM được kiểm soát, và tận dụng GPU chủ yếu cho tăng tốc hội tụ của mô hình thay vì để giải quyết bài toán dung lượng dữ liệu thô.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Ray, Ray Data, Ray Train, MIMIC-IV, Survival Analysis, Distributed Join, Clinical Decision Support System.
+\end{IEEEkeywords}
+
+\input{section/introduction.tex}
+\input{section/background.tex}
+\input{section/method.tex}
+\input{section/experiments.tex}
+\input{section/evaluation.tex}
+\input{section/conclusion.tex}
+
+\input{section/cite.tex}
+
+\end{document}

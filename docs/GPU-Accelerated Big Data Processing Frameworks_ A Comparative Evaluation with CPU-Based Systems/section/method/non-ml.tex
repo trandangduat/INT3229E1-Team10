@@ -1,0 +1,74 @@
+\subsection{Tiếp cận theo hướng không dùng học máy}
+
+Trong bối cảnh bài toán này, có một phương pháp non-ML mang lại hiệu quả đáng kinh ngạc
+so với các phương pháp sử dụng thuật toán Machine Learning, Deep Learning. Chúng tôi tạm gọi nó là heuristic method.
+Có một số lý do khiến model này hiệu quả. Thứ nhất, chúng tôi nhận thấy khi lấy trung bình tín hiệu trên từng bước thời gian sau khi xử lý tín hiệu,
+ta được Hình~\ref{fig:average_signal} và Hình~\ref{fig:transit}.
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\linewidth]{figures/average_signal.png}
+    \caption{Trung bình tín hiệu trên từng bước thời gian}
+    \label{fig:average_signal}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\linewidth]{figures/transit.png}
+    \caption{Insight về hiện tượng transit}
+    \label{fig:transit}
+\end{figure}
+
+Có thể quan sát thấy rằng tín hiệu thu được thường có dạng lõm ở phần giữa, phản ánh hiện tượng hành tinh đi qua phía trước ngôi sao chủ (transit), khiến cường độ ánh sáng giảm xuống do bị che khuất. Độ suy giảm này đạt cực đại khi hành tinh nằm tại vị trí trung tâm của ngôi sao trên đường đi của nó.
+
+Dựa trên hiện tượng vật lý này, thay vì huấn luyện một mô hình học máy, chúng tôi đề xuất một phương pháp tiếp cận thực nghiệm, trong đó tìm kiếm trực tiếp một hệ số khuếch đại tối ưu cho từng phổ tín hiệu.
+
+Cụ thể, với mỗi phổ, chúng tôi thực hiện phát hiện khoảng thời gian xảy ra transit, bằng cách xác định hai điểm mốc là \texttt{phase1} và \texttt{phase2}---tương ứng với thời điểm bắt đầu và kết thúc của quá trình transit. Quá trình này được thực hiện thông qua hàm \texttt{phase\_detector}, dựa trên đạo hàm bậc nhất của tín hiệu.
+Đạo hàm được sử dụng bởi vì ta thấy phase1 là nơi tín hiệu giảm nhanh nhất, phase2 là điểm tín hiệu tăng nhất nhất. Do đó, ta dùng đạo hàm bậc nhất để tìm điểm có đạo hàm cực tiểu và cực đại trong khoảng có tiềm năng.
+
+Sau khi xác định được đoạn tín hiệu chứa hiện tượng transit, chúng tôi tìm một hệ số khuếch đại $s$ sao cho khi nhân đoạn tín hiệu này với $(1 + s)$ thì toàn bộ tín hiệu trở nên “mượt” nhất có thể khi được xấp xỉ bằng một đa thức.
+Độ “mượt” này được định lượng bằng các hàm sai số dùng trong hồi quy giữa tín hiệu đã điều chỉnh và đường cong hồi quy. Cụ thể, trước tiên ta sẽ dùng hồi quy đa thức để fit phần out-of-transit với một đường đa thức nào đó. Sau đó, dùng phương pháp tối ưu hóa Nelder-Mead
+để tìm s sao cho hàm lỗi là nhỏ nhất khi nhân phần in-transit với (1+s). 
+Sau nhiều thử nghiệm, chúng tôi nhận thấy rằng sử dụng đa thức bậc ba với hồi quy ($\text{degree} = 3$) sẽ cho kết quả ổn định và chính xác nhất.
+
+Để rõ ràng hơn, ta giả sử đoạn tín hiệu trong khoảng \texttt{[phase1:phase2]} tương ứng với pha transit có giá trị trung bình là \( it \) (in-transit), và phần còn lại có giá trị trung bình là \( oot \) (out-of-transit). Khi áp dụng hệ số khuếch đại \( s \) vào vùng transit, ta có:
+
+\begin{equation}
+    \text{Adjusted in-transit signal} = it \cdot (1 + s)
+\end{equation}
+    
+
+Giả định rằng việc điều chỉnh này làm cho mức tín hiệu trong vùng transit tiệm cận với mức tín hiệu ngoài transit, tức là:
+
+\begin{equation}
+    it \cdot (1 + s) = oot
+\end{equation}
+    
+
+Từ đó, ta suy ra:
+
+\begin{equation}
+    s = \frac{oot - it}{it}
+\end{equation}
+    
+
+Mặt khác, transit depth (mục tiêu cần dự đoán) được định nghĩa là:
+
+\begin{equation}
+    \text{transit depth} = \frac{oot - it}{oot}
+\end{equation}
+
+Ta thay \( s \) vào biểu thức trên:
+
+\begin{equation}
+    \text{transit depth} = \frac{s \cdot it}{oot} = \frac{s \cdot it}{it (1 + s)} = \frac{s}{1 + s} = 1 - \frac{1}{1 + s}
+\end{equation}
+
+Vậy:
+
+\begin{equation}
+    \boxed{\text{transit depth} = 1 - \frac{1}{1 + s}}
+\end{equation}
+
+Công thức này cho thấy mối quan hệ chặt chẽ giữa hệ số khuếch đại \( s \) và transit depth (mục tiêu cần dự đoán), giúp diễn giải rõ ràng giá trị đầu ra của mô hình non-ML theo cách có ý nghĩa vật lý.
+% Tuy nhiên, thực nghiệm cho thấy, khi ta lấy transit depth xấp xỉ bằng s thì lại cho kết quả cao hơn việc lấy theo chính xác công thức trên.
+% Do đó, chúng tôi quyết định sử dụng giá trị transit depth xấp xỉ bằng s để làm đầu ra của mô hình.

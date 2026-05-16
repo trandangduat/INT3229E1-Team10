@@ -1,0 +1,19 @@
+\subsection{Tập dữ liệu}
+
+Bộ dữ liệu trong thử thách Ariel bao gồm các quan sát mô phỏng từ hai thiết bị cảm biến chính của tàu Ariel:
+\begin{itemize}
+    \item \textbf{FGS1} (Fine Guidance Sensor): cung cấp chuỗi ảnh 32$\times$32 pixel, độ phân giải thời gian 0.1s trong phổ ánh sáng khả kiến (0.60–0.80 µm).
+    \item \textbf{AIRS-CH0} (Ariel Infrared Spectrometer): cung cấp chuỗi ảnh 32$\times$356 pixel, độ phân giải thấp hơn nhưng nằm trong phổ hồng ngoại (1.95–3.90 µm).
+\end{itemize}
+
+Mỗi hành tinh có thể có một hoặc nhiều lần quan sát, được lưu thành các chuỗi thời gian gồm hàng chục nghìn khung hình (FGS1: 135,000 frames; AIRS: 11,250 frames). Các ảnh được lưu dưới dạng mảng phẳng \texttt{uint16} và cần được hiệu chỉnh về động dải thực bằng cách sử dụng các tham số gain và offset trong tệp \texttt{adc\_info.csv}.
+
+Ngoài dữ liệu ảnh, thử thách còn cung cấp:
+\begin{itemize}
+    \item \textbf{Dữ liệu hiệu chuẩn}: gồm các tệp \texttt{dark}, \texttt{flat}, \texttt{dead}, \texttt{linear\_corr}, và \texttt{read noise} cho từng thiết bị.
+    \item \textbf{Siêu dữ liệu vật lý}: thông tin quỹ đạo và đặc điểm vật lý của hệ sao-hành tinh như khối lượng, bán kính, nhiệt độ sao, độ nghiêng quỹ đạo, v.v.
+    \item \textbf{Ground truth}: phổ thực (283 điểm phổ).
+\end{itemize}
+
+So với cuộc thi năm 2024, phiên bản 2025 tăng độ chân thực với các yếu tố vật lý như tối rìa sao (limb darkening), có thể nhiều hơn 1 quan sát cho 1 hành tinh.
+

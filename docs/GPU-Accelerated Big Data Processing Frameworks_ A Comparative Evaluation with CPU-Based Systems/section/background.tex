@@ -1,0 +1,226 @@
+\section{Architecture of Modern Distributed Computing: The Ray Paradigm}
+
+\subsection{Từ pipeline phân mảnh đến nền tảng tính toán thống nhất}
+Các hệ thống phân tích y tế hiện đại không chỉ cần xử lý dữ liệu lớn, mà còn cần di chuyển linh hoạt giữa các pha ingestion, distributed join, ETL, feature engineering, huấn luyện mô hình và suy luận. Kiến trúc phân tách công cụ truyền thống khiến từng pha được tối ưu cục bộ nhưng toàn pipeline lại chịu chi phí tích lũy lớn do serialization, disk I/O và độ trễ điều phối. Trong bối cảnh đó, Ray nổi lên như một mô hình mới, nơi xử lý dữ liệu, lập lịch tác vụ và huấn luyện phân tán có thể cùng hoạt động trong một runtime thống nhất. Cách tiếp cận này đặc biệt phù hợp với bài toán y tế, nơi pipeline không chỉ xử lý time-series mà còn phải kết nối nhiều bảng lâm sàng khác nhau trước khi downstream AI có thể bắt đầu.
+
+Hình~\ref{fig:spark-ray-pipeline} minh họa trực quan khác biệt cốt lõi của bài báo: pipeline kiểu Spark truyền thống thường phải materialize dữ liệu trung gian xuống HDFS rồi nạp lại vào môi trường học máy riêng, trong khi Ray giữ các bước distributed join, aggregation và training trong một runtime thống nhất. Nhờ đó, trọng tâm của nghiên cứu chuyển từ việc tối ưu từng công cụ rời rạc sang tối ưu toàn bộ đường đi dữ liệu từ các bảng MIMIC-IV thô đến Gold Data và mô hình XGBoost Survival Analysis.
+
+\begin{figure*}[t]
+\centering
+\resizebox{\textwidth}{!}{
+\begin{tikzpicture}[
+    font=\small,
+    box/.style={
+        rectangle,
+        rounded corners=3pt,
+        draw,
+        thick,
+        minimum width=4.6cm,
+        minimum height=1.05cm,
+        align=center,
+        fill=white
+    },
+    sparkbox/.style={
+        box,
+        draw=orange!80!black,
+        fill=orange!5
+    },
+    raybox/.style={
+        box,
+        draw=green!60!black,
+        fill=green!5
+    },
+    header/.style={
+        rectangle,
+        rounded corners=3pt,
+        minimum width=5.2cm,
+        minimum height=0.75cm,
+        align=center,
+        text=white,
+        font=\bfseries\large
+    },
+    arrow/.style={
+        -{Latex[length=3mm]},
+        thick
+    },
+    sparkarrow/.style={
+        arrow,
+        draw=orange!80!black
+    },
+    rayarrow/.style={
+        arrow,
+        draw=green!60!black
+    },
+    runtime/.style={
+        rectangle,
+        rounded corners=5pt,
+        draw=green!60!black,
+        dashed,
+        thick,
+        inner sep=10pt,
+        fill=green!3
+    },
+    captionlabel/.style={
+        font=\bfseries,
+        align=center
+    }
+]
+
+% =========================
+% Title
+% =========================
+\node[font=\bfseries\Large, text=blue!35!black] at (0, 1.1)
+{Kiến trúc pipeline: Spark vs Ray cho MIMIC-IV};
+
+\node[font=\itshape, text=blue!35!black] at (0, 0.55)
+{patients + admissions + chartevents $\rightarrow$ Gold Data $\rightarrow$ huấn luyện XGBoost Survival trên GPU};
+
+% =========================
+% Panel headers
+% =========================
+\node[header, fill=orange!85!black] (sparkhead) at (-3.7, -0.35)
+{Spark Pipeline};
+
+\node[header, fill=green!55!black] (rayhead) at (3.7, -0.35)
+{Ray Pipeline};
+
+% =========================
+% Spark pipeline
+% =========================
+\node[sparkbox, below=0.55cm of sparkhead] (s1)
+{\textbf{1. HDFS / Raw Data}};
+
+\node[sparkbox, below=0.45cm of s1] (s2)
+{\textbf{2. Spark ETL}\\
+Join / Aggregation\\
+{\footnotesize CPU Cluster}};
+
+\node[sparkbox, below=0.45cm of s2] (s3)
+{\textbf{3. Parquet / CSV}\\
+Intermediate Files};
+
+\node[sparkbox, below=0.45cm of s3] (s4)
+{\textbf{4. XGBoost Survival}\\
+Training\\
+{\footnotesize GPU Node}};
+
+\draw[sparkarrow] (s1) -- (s2);
+\draw[sparkarrow] (s2) -- (s3);
+\draw[sparkarrow] (s3) -- (s4);
+
+\node[captionlabel, text=orange!85!black, below=0.35cm of s4]
+{Tách ETL và Training};
+
+% Outer Spark panel
+\node[
+    draw=orange!80!black,
+    rounded corners=5pt,
+    thick,
+    fit=(sparkhead)(s1)(s2)(s3)(s4),
+    inner sep=14pt
+] {};
+
+% =========================
+% Ray pipeline
+% =========================
+\node[raybox, below=0.55cm of rayhead] (r1)
+{\textbf{1. HDFS / Raw Data}};
+
+\node[raybox, below=0.90cm of r1] (r2)
+{\textbf{2. Ray Data}\\
+{\footnotesize CPU Head / Worker Nodes}};
+
+\node[raybox, below=0.45cm of r2] (r3)
+{\textbf{3. Gold Data}};
+
+\node[raybox, below=0.45cm of r3] (r4)
+{\textbf{4. Ray Train}\\
+{\footnotesize GPU Edge Node}};
+
+\draw[rayarrow] (r1) -- (r2);
+\draw[rayarrow] (r2) -- (r3);
+\draw[rayarrow] (r3) -- (r4);
+
+% Unified runtime box
+\begin{scope}[on background layer]
+\node[
+    runtime,
+    fit=(r2)(r3)(r4),
+    label={[text=green!50!black,font=\bfseries]above:Unified Ray Runtime}
+] {};
+\end{scope}
+
+\node[captionlabel, text=green!50!black, below=0.35cm of r4]
+{Data + Train trong cùng runtime};
+
+% Outer Ray panel
+\node[
+    draw=green!60!black,
+    rounded corners=5pt,
+    thick,
+    fit=(rayhead)(r1)(r2)(r3)(r4),
+    inner sep=14pt
+] {};
+
+\end{tikzpicture}
+}
+\caption{Architecture-level comparison between a Spark-based pipeline and a Ray-based pipeline for the MIMIC-IV end-to-end analytics workflow.}
+\label{fig:spark-ray-pipeline}
+\end{figure*}
+
+\paragraph{TO DO}
+\begin{itemize}
+    \item Bổ sung 1 đoạn văn ngắn so sánh kiến trúc ``multi-engine'' với ``unified runtime'' ở mức khái niệm, có trích dẫn paper hoặc docs của Ray.
+    \item Chèn citation học thuật cho nhận định Ray là AI-native distributed framework, tránh để phần này chỉ dựa trên mô tả chung.
+    \item Viết thêm 2--3 câu phân tích Hình~\ref{fig:spark-ray-pipeline}, đặc biệt nhấn vào số lần materialization, số runtime và kiểu handoff dữ liệu.
+\end{itemize}
+
+\subsection{The Actor Model \& Task-based Scheduling}
+Một nền tảng lý thuyết quan trọng của Ray là mô hình tác vụ và actor. Thay vì gói toàn bộ workload vào các bước xử lý cứng kiểu stage-oriented như MapReduce, Ray cho phép biểu diễn công việc dưới dạng các \textit{remote tasks} và \textit{stateful actors}. Mô hình này tạo ra tính linh hoạt cao trong điều phối: các tác vụ join và ETL có thể được phân rã ở mức batch nhỏ, trong khi các actor dài sống có thể duy trì trạng thái cho các phiên huấn luyện hoặc bộ nạp dữ liệu. Với workload y tế, nơi một pipeline thường vừa có các bước xử lý song song mạnh, vừa có các bước cần giữ trạng thái tạm thời theo subject, admission hoặc cửa sổ thời gian, cơ chế này phù hợp hơn so với lối tổ chức cứng nhắc của các kiến trúc batch cổ điển.
+
+Về thực tiễn, task-based scheduling còn cho phép Ray tận dụng cụm không đồng nhất tốt hơn. Các tác vụ join giữa \textit{patients} và \textit{admissions}, hoặc các phép aggregation trên \textit{chartevents}, có thể được đẩy chủ yếu lên CPU node. Ngược lại, các tác vụ huấn luyện XGBoost Survival Analysis được lập lịch theo tài nguyên GPU. Nhờ đó, hệ thống không cần tách riêng một cluster ETL và một cluster AI; thay vào đó, scheduler của Ray đóng vai trò mặt phẳng điều phối chung cho toàn pipeline.
+
+\paragraph{TO DO}
+\begin{itemize}
+    \item Thêm trích dẫn paper Ray gốc cho actor model và task scheduling.
+    \item Viết thêm 1 đoạn so sánh cụ thể với MapReduce hoặc Spark stage scheduling, tập trung vào tính mềm dẻo của tác vụ heterogeneous.
+    \item Nếu có log hoặc dashboard, bổ sung ví dụ minh họa tác vụ CPU và GPU được schedule khác nhau trong cùng một job.
+    \item Làm rõ actor nào trong pipeline thực tế của nhóm có thể là long-lived, actor nào chỉ là stateless batch task.
+\end{itemize}
+
+\subsection{In-Memory Plasma Store \& Zero-Copy}
+Điểm khác biệt trung tâm của Ray nằm ở cơ chế object store trong bộ nhớ, thường được nhắc đến qua Plasma Store. Thay vì yêu cầu mọi bước trong pipeline phải tuần tự hóa dữ liệu và truyền qua file hệ thống hoặc qua runtime nặng, Ray cho phép nhiều tiến trình trong cụm truy cập các object dùng chung với overhead thấp hơn. Đối với pipeline lâm sàng trong đề tài này, nơi intermediate table bao gồm bảng nhãn sinh tồn, bảng đặc trưng time-series và Gold Data sau join cuối, khả năng dùng chung object trong bộ nhớ giúp giảm sao chép dữ liệu và giảm áp lực ghi đọc đĩa.
+
+Khái niệm \textit{zero-copy} trong bối cảnh Ray đặc biệt quan trọng khi pipeline cần bàn giao dữ liệu từ khâu xử lý đa bảng sang khâu huấn luyện. Nếu dữ liệu trung gian luôn phải materialize thành file rồi được một framework khác đọc lại, hiệu năng toàn hệ thống sẽ bị giới hạn bởi tốc độ lưu trữ nhiều hơn là bởi năng lực tính toán. Ngược lại, khi Ray Data và Ray Train cùng nằm trong một mặt phẳng runtime, Gold Data có thể được chuyển giao dưới dạng object hoặc stream nội bộ, giúp giảm mạnh độ trễ và làm cho toàn pipeline gần với mô hình \textit{in-memory distributed analytics} hơn là chuỗi batch job rời rạc.
+
+\paragraph{TO DO}
+\begin{itemize}
+    \item Tìm và trích dẫn nguồn mô tả Plasma Store hoặc object store architecture của Ray.
+    \item Bổ sung 1 ví dụ rất cụ thể: nếu không có zero-copy thì bảng Gold Data sẽ phải được ghi và đọc lại như thế nào.
+    \item Liên hệ trực tiếp với pipeline của nhóm bằng một mini-flow: ``distributed join $\rightarrow$ Gold Data $\rightarrow$ streaming batches''. 
+    \item Nếu có thể, thêm sơ đồ mũi tên dữ liệu để làm rõ ``no materialization back to HDFS''.
+\end{itemize}
+
+\subsection{Unified MLOps Ecosystem}
+Một lý do quan trọng khiến Ray phù hợp với đề tài này là hệ sinh thái MLOps thống nhất. Ray Data đảm nhiệm đọc dữ liệu phân tán, ánh xạ hàm tiền xử lý, thực hiện distributed join, gom batch và điều phối dòng dữ liệu; Ray Train đảm nhiệm huấn luyện mô hình phân tán; còn các thành phần như Ray Tune hoặc Ray Serve mở ra khả năng tối ưu siêu tham số và triển khai mô hình trong các pha tiếp theo. Với góc nhìn hệ thống, ưu điểm lớn nhất không nằm ở từng module riêng lẻ, mà ở việc các module này chia sẻ cùng một triết lý runtime.
+
+Trong đề tài này, sự liền mạch giữa Ray Data và Ray Train là trọng tâm. Sau khi ba bảng \textit{patients}, \textit{admissions} và \textit{chartevents} được hợp nhất thành Gold Data, kết quả không cần quay lại HDFS như một bước trung gian bắt buộc. Thay vào đó, dòng dữ liệu đã xử lý có thể được đưa thẳng vào huấn luyện theo kiểu \textit{streaming handoff}. Đây chính là điểm mà Ray mang lại lợi thế hệ thống vượt ra ngoài phạm vi của một engine ETL thuần túy.
+
+\paragraph{TO DO}
+\begin{itemize}
+    \item Thêm 1 bảng mô tả vai trò của từng thành phần Ray trong bài: Ray Data, Ray Train, Ray Serve, Ray Tune.
+    \item Viết rõ hơn phần nào của Ray đã dùng thật trong project, phần nào mới là hướng mở rộng tương lai.
+    \item Bổ sung trích dẫn docs hoặc paper cho sự kết nối giữa Ray Data và Ray Train.
+    \item Cân nhắc thêm một câu nêu giới hạn: bài này tập trung vào Data + Train, chưa benchmark Tune hoặc Serve.
+\end{itemize}
+
+\subsection{Kiến trúc lõi cần minh họa trong báo cáo}
+Để làm rõ chiều sâu nghiên cứu, báo cáo nên chèn một hình kiến trúc Ray tại phần này, gồm ba lớp chính: (1) ứng dụng người dùng ở tầng trên cùng, (2) scheduler và runtime phân tán ở tầng giữa, và (3) object store cùng tài nguyên phần cứng CPU/GPU ở tầng dưới. Hình này giúp nhấn mạnh rằng Ray không chỉ là thư viện xử lý dữ liệu, mà là một kiến trúc hệ thống hoàn chỉnh cho AI-native distributed computing.
+
+\paragraph{TO DO}
+\begin{itemize}
+    \item Chuẩn bị một hình kiến trúc Ray sạch, ưu tiên tự vẽ lại theo phong cách đồng nhất của báo cáo thay vì chụp nguyên xi từ docs.
+    \item Gắn nhãn rõ các thành phần cần liên hệ tới bài làm: head node, workers, object store, scheduler, CPU tasks, GPU training.
+    \item Viết caption theo hướng giải thích ý nghĩa của hình, không chỉ mô tả tên thành phần.
+    \item Đảm bảo figure này được viện dẫn trong thân bài bằng câu dẫn trước và câu phân tích sau hình.
+\end{itemize}

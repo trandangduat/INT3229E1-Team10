@@ -1,0 +1,55 @@
+\section{Introduction}
+
+\subsection{Bối cảnh nghiên cứu}
+Sự kết hợp giữa Big Data và Trí tuệ nhân tạo đang tái định hình các hệ thống hỗ trợ quyết định lâm sàng (Clinical Decision Support System - CDSS), đặc biệt trong các bài toán cần tích hợp dữ liệu đa luồng để dự báo nguy cơ cho bệnh nhân. Trong bối cảnh đó, bộ dữ liệu MIMIC-IV trở thành chuẩn tham chiếu quan trọng cho nghiên cứu y sinh tính toán nhờ chứa đồng thời thông tin nhân khẩu học, lịch sử nhập viện và các chuỗi thời gian sinh hiệu dày đặc. Đối với PREDICTCARE AI, giá trị cốt lõi không nằm ở việc phân tích một bảng riêng lẻ, mà ở khả năng hợp nhất dữ liệu từ nhiều bảng để tạo ra các đặc trưng lâm sàng có ý nghĩa cho dự báo sinh tồn[cite: 1].
+
+Cụ thể, ba bảng \textit{patients}, \textit{admissions} và \textit{chartevents} đóng vai trò trung tâm. Bảng \textit{patients} cung cấp thông tin nhân khẩu học và trạng thái tử vong; bảng \textit{admissions} xác định bối cảnh nhập viện và khung thời gian diễn ra biến cố; còn bảng \textit{chartevents} chứa hàng trăm triệu bản ghi đo đạc sinh hiệu theo thời gian. Việc kết nối đúng ba nguồn này là điều kiện tiên quyết để xây dựng một pipeline dự báo nguy cơ tử vong có giá trị ứng dụng thực tế.
+
+\paragraph{TO DO}
+\begin{itemize}
+    \item Thu thập 2--3 tài liệu nền về vai trò của Big Data, time-series và AI trong CDSS để mở đầu phần này bằng phát biểu có căn cứ.
+    \item Bổ sung số liệu mô tả ngắn về MIMIC-IV và quy mô của bảng \textit{chartevents} để làm rõ vì sao đây là benchmark đủ nặng cho bài toán phân tán.
+    \item Viết thêm 2--3 câu nối giữa mục tiêu học thuật và nhu cầu thực tế của PREDICTCARE AI, tránh để phần mở bài chỉ mang tính mô tả dataset.
+    \item Chèn citation tương ứng cho nhận định về tầm quan trọng của dữ liệu đa bảng trong phân tích lâm sàng.
+\end{itemize}
+
+\subsection{Nỗi đau công nghệ của pipeline truyền thống}
+Mặc dù dữ liệu y tế ngày càng phong phú, pipeline xử lý trong thực tế vẫn thường bị chia cắt giữa nhiều công cụ: một hệ thống cho ETL phân tán, một hệ thống khác cho huấn luyện mô hình, và thêm các bước trung gian để tuần tự hóa, lưu file và nạp lại dữ liệu. Kiến trúc này tạo ra ba nút thắt lớn. Thứ nhất là \textit{disk I/O bottleneck}, khi dữ liệu sau các bước join, aggregation và feature engineering phải ghi xuống đĩa hoặc data lake trước khi được đọc lại cho pha huấn luyện. Thứ hai là độ phức tạp vận hành do phải phối hợp nhiều runtime khác nhau, làm tăng chi phí cấu hình và khó khăn trong giám sát end-to-end. Thứ ba là rủi ro lỗi \textit{out-of-memory} ở RAM hệ thống trong quá trình kết nối và nén các bảng lâm sàng khổng lồ, đặc biệt khi \textit{chartevents} phải được join và aggregate cùng với các bảng ngữ cảnh như \textit{patients} và \textit{admissions}.
+
+Trong các kiến trúc cũ kiểu PySpark cộng với một framework ML tách biệt, bài toán không chỉ là xử lý chậm mà còn là chuyển giao dữ liệu rườm rà giữa các pha. Đặc biệt với pipeline đa bảng, các bước distributed join giữa bảng lớn và bảng nhỏ, sau đó tiếp tục nối sang feature table time-series, thường phát sinh overhead đáng kể về shuffle, serialization và materialization trung gian. Vì vậy, nút thắt không chỉ nằm ở một phép toán đơn lẻ, mà nằm ở toàn bộ quy trình từ raw data đến model.
+
+\paragraph{TO DO}
+\begin{itemize}
+    \item Liệt kê rõ ``hệ thống cũ'' của nhóm đang gồm những thành phần nào: PySpark, HDFS, script feature engineering, bước export file trung gian, bước train XGBoost.
+    \item Thu thập 1--2 ví dụ thực tế về bottleneck: thời gian ghi parquet, thời gian reload dữ liệu cho training, hoặc log System OOM khi join/aggregate dữ liệu lớn ở head node.
+    \item Viết thêm một đoạn so sánh định tính giữa pipeline phân mảnh và pipeline unified để tạo tiền đề hợp lý cho việc chọn Ray.
+    \item Nếu có thể, bổ sung một bảng nhỏ ``pain point $\rightarrow$ impact'' để tăng sức thuyết phục ở phần mở đầu.
+\end{itemize}
+
+\subsection{Bài toán thực tiễn của PREDICTCARE AI}
+Nghiên cứu này xuất phát từ nhu cầu triển khai một pipeline toàn trình cho PREDICTCARE AI, trong đó khoảng 300 triệu bản ghi sinh hiệu từ bảng \textit{chartevents} cần được kết nối với thông tin từ \textit{patients} và \textit{admissions} để tạo dữ liệu huấn luyện cho mô hình sinh tồn. Bài toán hệ thống được chia thành ba lớp: (1) xác định nhãn sinh tồn từ dữ liệu tử vong và thời gian nhập viện; (2) nén khối lượng dữ liệu chuỗi thời gian khổng lồ thông qua các phép windowing và aggregation trong 24 giờ hoặc 48 giờ đầu; và (3) kết hợp nhãn với đặc trưng để tạo ra Gold Data hoàn chỉnh phục vụ huấn luyện GPU.
+
+Kiến trúc cũ dựa trên cụm CPU truyền thống tuy giải quyết được bài toán lưu trữ, nhưng chưa xử lý tốt vấn đề chuyển giao dữ liệu giữa ETL và Machine Learning[cite: 1]. Do đó, hệ thống cần một nền tảng thống nhất có thể vừa đóng vai trò data engine cho pipeline đa bảng, vừa điều phối tài nguyên huấn luyện phân tán.
+
+\paragraph{TO DO}
+\begin{itemize}
+    \item Viết rõ hơn workflow hiện tại của PREDICTCARE AI: raw data đi vào đâu, ETL xong ra bảng gì, model hiện đang train trên dữ liệu nào.
+    \item Mô tả cụ thể ba lớp bài toán bằng ngôn ngữ hệ thống: input, processing step, output của từng lớp.
+    \item Bổ sung sơ đồ mini hoặc bullet sequence từ \textit{patients/admissions/chartevents} đến Gold Data để người đọc nhìn ra bài toán ngay lập tức.
+    \item Gắn một citation nội bộ hoặc tài liệu thiết kế hệ thống cho phần mô tả workflow hiện tại của PREDICTCARE AI.
+\end{itemize}
+
+\subsection{Mục tiêu nghiên cứu}
+Mục tiêu chính của bài báo cáo là đánh giá Ray như một giải pháp \textit{all-in-one}, được định nghĩa là một nền tảng vận hành trên cùng một runtime thống nhất cho các tác vụ \textit{distributed join}, ETL, huấn luyện mô hình và lập lịch tài nguyên. Cụ thể, nghiên cứu tập trung trả lời ba câu hỏi cốt lõi, tương ứng với ba tiêu chí đo đạc trong phần đánh giá. Thứ nhất là \textit{tính thống nhất của kiến trúc}: liệu Ray có thể thay thế các pipeline phân mảnh truyền thống bằng một quy trình phân tán duy nhất cho bài toán xử lý đa bảng, từ đó giảm độ phức tạp vận hành và mã nguồn hay không. Thứ hai là \textit{hiệu suất chuyển giao dữ liệu}: việc tích hợp Ray Data và Ray Train có giúp triệt tiêu các nút thắt cổ chai về disk I/O thông qua cơ chế bàn giao dữ liệu trong bộ nhớ hay không. Thứ ba là \textit{khả năng xử lý dữ liệu quy mô lớn trên tài nguyên hạn chế}: liệu cơ chế chunking, distributed processing và streaming handoff có cho phép xử lý và ``nén'' khoảng 300 triệu bản ghi thô, tương đương gần 30GB dữ liệu, thành tập Gold Data đặc tả chỉ khoảng 12MB mà không gây lỗi tràn bộ nhớ RAM hệ thống trên các node CPU cloud hay không. Trên cơ sở đó, báo cáo xem Ray không chỉ là một framework tính toán, mà là \textit{core engine} cho toàn bộ vòng đời dữ liệu và AI trong PREDICTCARE AI.
+
+Phạm vi của nghiên cứu này tập trung vào việc xây dựng và tối ưu hóa \textit{end-to-end pipeline} từ dữ liệu thô đến mô hình hoàn thiện. Các khía cạnh về triển khai dịch vụ mô hình hoặc suy luận trực tuyến không nằm trong phạm vi của bài báo cáo hiện tại.
+
+Đóng góp chính của nghiên cứu gồm ba điểm. Thứ nhất, nghiên cứu thiết kế và triển khai một pipeline phân tích y tế toàn trình trên kiến trúc lai cloud-edge sử dụng Ray. Thứ hai, nghiên cứu đề xuất cơ chế nén dữ liệu chuỗi thời gian quy mô rất lớn thành tập dữ liệu đặc tả gọn nhẹ thông qua distributed join, windowing và aggregation. Thứ ba, nghiên cứu cung cấp nền tảng cho các đánh giá định lượng về hiệu quả sử dụng tài nguyên không đồng nhất giữa CPU cloud và GPU tiêu dùng RTX 3060 trong cùng một runtime thống nhất.
+
+\paragraph{TO DO}
+\begin{itemize}
+    \item Đối chiếu ba câu hỏi nghiên cứu với ba subsection trong phần evaluation để bảo đảm mỗi câu hỏi đều có số liệu trả lời trực tiếp.
+    \item Điền số liệu thật cho luận điểm ``30GB raw data $\rightarrow$ 12MB Gold Data'' và gắn nó với chỉ số peak RAM của head node.
+    \item Nếu cần, tách phần ``Đóng góp chính'' thành danh sách đánh số để làm nổi bật novelty của bài báo theo phong cách IEEE.
+    \item Rà lại toàn bài để bỏ mọi câu chữ còn gợi ý rằng bài toán trung tâm là VRAM GPU thay vì data pipeline và System OOM ở phase ETL.
+\end{itemize}

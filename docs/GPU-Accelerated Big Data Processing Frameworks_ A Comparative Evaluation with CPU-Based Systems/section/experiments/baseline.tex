@@ -1,0 +1,63 @@
+\subsection{Tối ưu các hệ số mô hình non-ML}
+
+Ý tưởng của phương pháp non-ML đơn giản nhưng để thực nghiệm
+hiệu quả thì cần phải chọn các tham số phù hợp dựa vào các quan sát trên dữ liệu.
+
+Như đã đề cập ở trên, chúng tôi nhân đoạn tín hiệu transit với $1 + s$ và kỳ vọng
+đoạn tín hiệu thu được sẽ mượt như khi không có hành tinh nào đi qua sao chủ. Tín hiệu
+này sẽ được xấp xỉ bằng một đa thức. Việc chọn bậc của đa thức này ảnh hưởng lớn đến
+độ chính xác của mô hình. Nhìn vào dữ liệu như hình $\ref{fig:poly_degree}$, ta thấy rằng
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\linewidth]{figures/poly_degree.png}
+    \caption{Hình dạng phổ biến của flux theo thời gian trong tập dữ liệu}
+    \label{fig:poly_degree}
+\end{figure}
+sau khi nhân phần lõm ở giữa với $1 + s$ thì tín hiệu không phải lúc nào cũng là 1 đường tuyến tính.
+Hình dạng phổ biến là bậc 1, 2, 3.
+Chúng tôi thực nghiệm với các giá trị bậc đa thức khác nhau cho kết quả như bảng $\ref{tab:poly_degree_score}$.
+
+\begin{table}[htbp]
+    \centering
+    \begin{tabular}{|c|c|c|c|c|c|c|}
+        \hline
+        Bậc đa thức & 1 & 2 & 3 & 4 & 5 & 10 \\
+        \hline
+        Điểm & 0.314 & 0.315 & 0.322 & 0.310 & 0.304 & 0.115 \\
+        \hline
+    \end{tabular}
+    % \caption{Ảnh hưởng của bậc đa thức đến điểm mô hình non-ML}
+    \label{tab:poly_degree_score}
+\end{table}
+
+Sau khi fit tín hiệu với một đa thức bậc 3, ta tìm $s$ tối ưu (hiệu trị tuyệt đối nhỏ nhất),
+chúng tôi dự đoán transit depth dựa vào $s$.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\linewidth]{figures/explain_SCALE.png}
+    \caption{Mối quan hệ giữa s, mục tiêu cần dự đoán}
+    \label{fig:explain_scale}
+\end{figure}
+
+Nhận thấy rằng, nếu lấy giá trị dự đoán theo $\frac{s}{1 + s}$ 
+cho ra kết quả thấp hơn so với lấy $s * SCALE$. Hơn nữa, khi ta tính giá trị $SCALE = truth.mean / s$
+với mỗi điểm dữ liệu, thì giá trị này sẽ gần bằng nhau cho tất cả các hành tinh.
+Chạy thực nghiệm cho thấy, sử dụng $SCALE = 0.9396$ cho điểm cao nhất.
+
+Dựa vào công thức tính điểm, để tối ưu điểm không chỉ cần dự đoán chính xác mà còn cần
+dự đoán độ không chắc chắn phù hợp. Giả định rằng, giá trị dự đoán của mô hình khớp với
+trung bình của quang phổ cần dự đoán, như vậy
+\begin{equation}
+    \sigma^* = argmax_{\sigma}\sum_{i = 1}^{283} \left( log(\sigma^2) + \frac{(truth[i] - \mu_{truth})^2}{\sigma^2} \right)
+\end{equation}
+
+Dễ thấy, hàm mục tiêu là tổng 2 hàm lồi, 
+\begin{equation}
+    (\sigma^*)^2 = \sum_{i = 1}^{283} (truth[i] - \mu_{truth})^2 = (\sigma_{truth})^2
+\end{equation}
+
+Nhận thấy rằng, giá trị $\sigma$ tối ưu cho từng hành tinh là khác nhau và có liên quan 
+đến tín hiệu theo trục thời gian. Chúng tôi sử dụng mô hình phụ LinearRegression với đầu vào là tín hiệu,
+đầu ra là $\sigma_{truth}$, và thực hiện huấn luyện mô hình này trên tập dữ liệu huấn luyện.
+Kết quả tăng 0.004 so với việc sử dụng giá trị $\sigma$ cố định cho tất cả các hành tinh.

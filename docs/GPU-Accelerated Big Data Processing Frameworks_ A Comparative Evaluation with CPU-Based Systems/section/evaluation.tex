@@ -1,0 +1,42 @@
+\section{Empirical Evaluation}
+
+\subsection{Performance \& Execution Metrics}
+Đánh giá thực nghiệm tập trung vào hai thước đo chính: thời gian hoàn thành khâu Data Processing và thời gian hoàn thành huấn luyện mô hình sống còn. Ở pha Data Processing, báo cáo cần nhấn mạnh ba lớp chi phí: thời gian join \textit{patients} với \textit{admissions}, thời gian quét và aggregation trên \textit{chartevents}, và thời gian final distributed join để tạo Gold Data. Điểm cần nhấn mạnh không chỉ là tốc độ, mà là việc hệ thống đã ép thành công khoảng 30GB dữ liệu thô thành tập dữ liệu huấn luyện đặc tả chỉ khoảng 12MB mà vẫn duy trì pipeline ổn định.
+
+Một khía cạnh quan trọng khác là tính ổn định thực thi ở phase data pipeline. Trong pipeline cũ, join bảng lớn với bảng nhỏ và sau đó aggregate time-series thường phát sinh overhead bộ nhớ rất lớn ở RAM hệ thống, thậm chí dễ gây System OOM trên head node nếu dữ liệu bị materialize không kiểm soát. Với Ray, distributed join và chunked processing được giữ trong cùng runtime, nhờ đó hệ thống có thể tạo Gold Data hoàn chỉnh trong khi mức tiêu thụ RAM đỉnh của head node vẫn nằm trong giới hạn chấp nhận được. Vì vậy, các chỉ số ``peak RAM'', ``compression ratio'' và ``hoàn thành thành công end-to-end'' cần được xem là tiêu chí đánh giá quan trọng ngang với wall-clock time.
+
+\paragraph{TO DO}
+\begin{itemize}
+    \item Điền số liệu thật cho từng pha: label generation, aggregation, final join, training; đặc biệt nhấn mạnh thời gian xử lý 30GB dữ liệu thô thành Gold Data 12MB.
+    \item Chuẩn bị baseline để so sánh: PySpark cũ, pandas local hoặc pipeline cũ của nhóm, ưu tiên các trường hợp từng gặp chậm do join lớn hoặc vấp lỗi System OOM.
+    \item Bổ sung một bảng tổng hợp runtime và một biểu đồ cột để nhìn nhanh chênh lệch giữa hệ cũ và Ray.
+    \item Nếu có lỗi OOM cũ, mô tả ngắn tình huống đó như một baseline thất bại và đặt cạnh số liệu peak RAM hiện tại để tăng sức nặng cho kết quả.
+\end{itemize}
+
+\subsection{Resource Utilization}
+Để chứng minh tính hợp lý của thiết kế cụm không đồng nhất, báo cáo nên đưa ảnh chụp từ Ray Dashboard vào phần này. Diễn giải mong muốn của biểu đồ là: ở phase 1, CPU của head node và các worker hoạt động ở mức cao do workload chủ yếu là ETL, distributed join và feature extraction; ở phase 2, mức sử dụng CPU giảm dần trong khi GPU trên edge node tăng mạnh khi bước huấn luyện bắt đầu. Mô hình chuyển pha tài nguyên này cho thấy pipeline đã tận dụng đúng vai trò của từng tầng phần cứng thay vì để GPU bị rỗi trong ETL hoặc để CPU tiếp tục là nút thắt trong training.
+
+Ngoài CPU và GPU utilization, báo cáo cũng nên bình luận về network transfer giữa head node và edge node qua Tailscale. Dù có thêm chi phí mạng, kiến trúc tách rời này vẫn có lợi vì cho phép tái sử dụng phần cứng tiêu dùng sẵn có, thay vì bắt buộc gom mọi tài nguyên vào một máy đơn nhiều chi phí.
+
+Một chỉ số cần được nhấn mạnh thêm ở phần này là \textit{peak RAM} của head node trong phase join và aggregation. Nếu chứng minh được hệ thống nén khoảng 30GB dữ liệu thô xuống 12MB Gold Data trong khi RAM đỉnh chỉ dao động quanh một ngưỡng X GB nhờ cơ chế chunking của Ray, thì giá trị kỹ thuật của data pipeline sẽ được thể hiện rõ ràng hơn nhiều so với việc chỉ báo cáo thời gian chạy.
+
+\paragraph{TO DO}
+\begin{itemize}
+    \item Chụp Ray Dashboard ở ít nhất 2 thời điểm: ETL/Join phase và Training phase.
+    \item Chuẩn bị một hình hoặc bảng nhỏ tóm tắt CPU utilization, GPU utilization, peak RAM của head node và network activity.
+    \item Viết phần giải thích hình theo logic ``what the graph shows'' thay vì chỉ nói ``hình cho thấy tài nguyên được sử dụng tốt''.
+    \item Bổ sung số liệu peak RAM thật của head node và gắn trực tiếp với luận điểm chunking/compression ở phase data pipeline.
+\end{itemize}
+
+\subsection{Developer Experience}
+Một kết quả đáng chú ý của đề tài nằm ở trải nghiệm lập trình. Toàn bộ pipeline được mô tả bằng Python và vận hành trong cùng một hệ sinh thái Ray, thay vì phải phối hợp giữa nhiều ngôn ngữ hoặc nhiều tầng cấu hình như Spark, YARN và các bước nạp dữ liệu thủ công cho framework ML khác. Điều này không chỉ rút ngắn thời gian phát triển, mà còn giúp việc debug, tái lập thí nghiệm và quan sát end-to-end trở nên dễ dàng hơn.
+
+Từ góc độ nhóm phát triển PREDICTCARE AI, lợi ích quan trọng nhất là giảm chi phí nhận thức của hệ thống. Khi cùng một team có thể dùng một runtime để đi từ multi-table ingestion đến survival training, khả năng bảo trì và mở rộng về lâu dài sẽ tốt hơn đáng kể so với một kiến trúc ghép nối nhiều thành phần rời.
+
+\paragraph{TO DO}
+\begin{itemize}
+    \item Viết một bảng so sánh ngắn ``Old stack vs Ray stack'' về số công cụ, số bước, số lần materialize dữ liệu và độ khó vận hành.
+    \item Ghi lại ví dụ thực tế từ lúc phát triển: số lượng script giảm đi, số bước debug giảm đi, hoặc chỗ nào Ray dashboard hỗ trợ debug tốt hơn.
+    \item Thêm 1 nhận định trung thực về nhược điểm hoặc learning curve của Ray để phần đánh giá cân bằng hơn.
+    \item Nếu có thể, đưa một sơ đồ nhỏ về developer workflow từ code đến execution để minh họa tính thống nhất của Python-only stack.
+\end{itemize}

@@ -1,0 +1,40 @@
+\section{System Design \& Methodology}
+
+\subsection{Heterogeneous Cloud-Edge Architecture}
+Hệ thống thực nghiệm được thiết kế theo mô hình cụm phân tán lai, trong đó tài nguyên được tách thành hai tầng với vai trò khác nhau nhưng được điều phối bởi cùng một Ray runtime. Tầng thứ nhất là \textit{Cloud Head Node}, chịu trách nhiệm điều phối job, lưu trữ metadata và đóng vai trò điểm truy cập tới lớp dữ liệu thô. Node này thiên về CPU và đồng thời kết nối với hệ thống lưu trữ phân tán HDFS. Tầng thứ hai là \textit{Edge Compute Node}, sở hữu GPU NVIDIA RTX 3060 12GB và được dùng cho các pha huấn luyện cần tăng tốc phần cứng.
+
+Hai tầng được kết nối qua mạng riêng ảo Tailscale, tạo thành một không gian điều phối thống nhất mặc dù phần cứng nằm ở các vị trí vận hành khác nhau. Cách mô tả này phản ánh đúng tinh thần \textit{decoupled compute and storage}: lưu trữ và điều phối có thể đặt ở phía cloud hoặc hạ tầng máy chủ phổ thông, trong khi GPU tiêu dùng đặt ở edge vẫn được huy động như một tài nguyên huấn luyện hợp lệ của cả hệ thống. Trong báo cáo, kiến trúc này nên được minh họa bằng một sơ đồ topology mạng gồm HDFS, head node, worker CPU và edge GPU node.
+
+\paragraph{TO DO}
+\begin{itemize}
+    \item Điền thông số thật của từng node: CPU, RAM, ổ đĩa, GPU, hệ điều hành, phiên bản Ray, cách kết nối mạng.
+    \item Vẽ topology mạng thể hiện rõ HDFS ở đâu, Ray head ở đâu, Ray worker/GPU ở đâu, Tailscale nối các node như thế nào.
+    \item Viết rõ đường đi dữ liệu từ storage sang compute và từ CPU node sang GPU node.
+    \item Nếu chỉ có 2 máy, mô tả kiến trúc theo logic ``cloud-edge'' nhưng vẫn trung thực về số lượng node trong experimental setup.
+\end{itemize}
+
+\subsection{Clinical Data Modeling: MIMIC-IV Multi-table Construction}
+Nguồn dữ liệu nghiên cứu được xây dựng từ ba bảng cốt lõi của MIMIC-IV là \textit{patients}, \textit{admissions} và \textit{chartevents}. Bảng \textit{patients} được dùng để xác định thông tin nền tảng của bệnh nhân và trạng thái tử vong. Bảng \textit{admissions} cung cấp ngữ cảnh nhập viện, mốc thời gian bắt đầu theo dõi và khung \textit{time-to-event}. Bảng \textit{chartevents} chứa khoảng 300 triệu bản ghi sinh hiệu dạng time-series, phản ánh trạng thái lâm sàng động trong suốt quá trình chăm sóc.
+
+Từ góc nhìn mô hình hóa, nghiên cứu tách bạch rõ ràng giữa \textit{label} và \textit{features}. Label sinh tồn được xây dựng từ quan hệ giữa \textit{patients} và \textit{admissions}, cụ thể là biến cố tử vong và thời gian từ lúc nhập viện đến biến cố hoặc kiểm duyệt. Ngược lại, features được trích xuất hoàn toàn từ \textit{chartevents} thông qua các phép windowing và aggregation trên các cửa sổ lâm sàng sớm như 24 giờ hoặc 48 giờ đầu. Việc tách rõ hai lớp này giúp pipeline tránh rò rỉ nhãn và tạo nền tảng chặt chẽ cho survival analysis.
+
+\paragraph{TO DO}
+\begin{itemize}
+    \item Viết rõ schema tối thiểu của từng bảng: khóa join, cột thời gian, cột event, cột dùng cho feature extraction.
+    \item Mô tả quy tắc tạo label bằng công thức hoặc pseudo-logic: event, censoring, time-to-event.
+    \item Liệt kê danh sách sinh hiệu chính lấy từ \textit{chartevents} và tiêu chí chọn chúng.
+    \item Thêm một hình hoặc bảng ``Label vs Features'' để chứng minh không bị leakage giữa dữ liệu mục tiêu và dữ liệu đầu vào.
+\end{itemize}
+
+\subsection{Analytical Model \& Expected Output}
+Mô hình downstream được lựa chọn là XGBoost Survival Analysis với hàm mục tiêu \texttt{survival:cox}. Lựa chọn này phù hợp với bài toán dự báo tiên lượng lâm sàng vì mô hình không chỉ học quan hệ giữa đặc trưng và biến cố, mà còn tận dụng thông tin thời gian xảy ra biến cố trong dữ liệu. Với tập feature được xây dựng từ nhiều nguồn lâm sàng, mô hình kỳ vọng nắm bắt được ảnh hưởng tổng hợp của nhân khẩu học, bối cảnh nhập viện và biến thiên sinh hiệu sớm đến nguy cơ tử vong.
+
+Đầu ra mà PREDICTCARE AI hướng tới không dừng ở một nhãn nhị phân. Thay vào đó, hệ thống cần cung cấp \textit{Hazard Ratio} như một chỉ số rủi ro tương đối và \textit{Survival Probability Curve} như một biểu diễn trực quan của xác suất sinh tồn theo thời gian. Hai đầu ra này có giá trị thực tế với bác sĩ vì cho phép đánh giá tiên lượng bệnh nhân theo hướng động, thay vì chỉ đưa ra một dự báo có hoặc không. Trong bối cảnh dữ liệu lớn và số lượng feature cao, GPU là yêu cầu gần như bắt buộc để rút ngắn thời gian hội tụ của XGBoost và làm cho huấn luyện trở nên thực tiễn.
+
+\paragraph{TO DO}
+\begin{itemize}
+    \item Ghi rõ thư viện hoặc implementation cụ thể đang dùng cho XGBoost survival:cox và các tham số chính dự kiến.
+    \item Bổ sung một đoạn giải thích ngắn về ý nghĩa của hazard ratio và survival curve dưới góc nhìn lâm sàng.
+    \item Thêm mô tả input/output của model ở dạng bảng: feature vector, label, prediction artifacts.
+    \item Nếu có thể, đưa một hình minh họa survival curve mẫu để người đọc dễ hình dung đầu ra cuối cùng.
+\end{itemize}

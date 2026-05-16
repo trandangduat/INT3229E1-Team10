@@ -1,0 +1,38 @@
+\section{End-to-End Pipeline Implementation}
+
+\subsection{Distributed ETL via Ray Data}
+Pipeline toàn trình bắt đầu từ việc đọc dữ liệu thô từ HDFS vào Ray Data dưới dạng dataset phân tán. Bước đầu tiên là \textit{label generation}, trong đó Ray thực hiện join giữa \textit{patients} và \textit{admissions} để tạo bảng nhãn sinh tồn. Tại bước này, trạng thái tử vong và mốc thời gian nhập viện được kết hợp để xác định biến cố, thời gian theo dõi và cấu trúc dữ liệu phù hợp cho objective \texttt{survival:cox}. Đây là lớp dữ liệu mục tiêu của toàn pipeline và được duy trì tách biệt với feature engineering nhằm bảo đảm tính đúng đắn thống kê.
+
+Bước thứ hai là \textit{windowing and aggregation} trên bảng \textit{chartevents}. Thay vì cố gắng materialize toàn bộ 300 triệu dòng vào bộ nhớ, Ray Data đọc dữ liệu theo hướng streaming và sử dụng các phép biến đổi theo batch như \texttt{map\_batches} để chuẩn hóa schema, lọc các chỉ số sinh hiệu quan trọng, đồng bộ thời gian theo admission, và tính các đặc trưng thống kê như \textit{mean}, \textit{max} và \textit{min} trong các khung 24 giờ hoặc 48 giờ đầu. Nhờ đó, khối dữ liệu chuỗi thời gian khổng lồ được nén lại thành feature table gọn hơn nhưng vẫn giữ được tín hiệu lâm sàng chính.
+
+Bước thứ ba là \textit{final distributed join}. Bảng đặc trưng sinh hiệu sau aggregation được ghép nối với bảng nhãn đã xây dựng ở bước một để tạo ra Gold Data hoàn chỉnh. Đây là bước đặc biệt quan trọng trong đề tài vì nó thể hiện rõ năng lực của Ray đối với pipeline đa bảng: một phía là bảng đặc trưng thu gọn từ time-series quy mô cực lớn, phía còn lại là bảng nhãn được suy diễn từ dữ liệu nhân khẩu học và nhập viện. Kết quả cuối cùng là một dataset huấn luyện nhất quán, sẵn sàng chuyển thẳng sang mô hình survival.
+
+\paragraph{TO DO}
+\begin{itemize}
+    \item Viết pseudo-pipeline thật rõ theo 3 bước: label generation, aggregation, final distributed join.
+    \item Bổ sung tên khóa join, điều kiện lọc thời gian, các itemid sinh hiệu và công thức aggregation đang dùng.
+    \item Chèn một bảng ``Input $\rightarrow$ Transformation $\rightarrow$ Output'' cho từng bước ETL để người đọc thấy pipeline có cấu trúc.
+    \item Chuẩn bị benchmark riêng cho bước join giữa bảng nhỏ và bảng lớn, vì đây là điểm hội đồng sẽ hỏi nhiều.
+\end{itemize}
+
+\subsection{Seamless Handoff to GPU Training}
+Sau khi Gold Data được hình thành, hệ thống không đưa bảng này quay về HDFS như một pipeline hai pha cổ điển. Thay vào đó, Ray Data bàn giao trực tiếp kết quả đã được nén mạnh sang Ray Train trong cùng một runtime. Điểm mấu chốt ở đây không còn là ``chia nhỏ để vừa VRAM'', mà là tận dụng việc phase ETL đã cô đặc khối dữ liệu thô thành một ma trận đặc trưng dày đặc, gọn nhẹ và sẵn sàng cho huấn luyện tăng tốc bằng GPU.
+
+Nhờ năng lực nén dữ liệu mạnh mẽ của Ray Data ở phase trước, khoảng 30GB dữ liệu thô từ \textit{chartevents} và các bảng liên quan đã được tinh giản thành tập Gold Data đặc tả chỉ khoảng 12MB. Sự gọn nhẹ này cho phép Ray Train nạp toàn bộ ma trận đặc trưng vào thẳng bộ nhớ VRAM của GPU RTX 3060 trong một lần, theo đúng tinh thần \textit{in-memory training}. Vì vậy, GPU không còn phải gánh vai trò ``giải cứu dung lượng'', mà được sử dụng đúng thế mạnh là tăng tốc tính toán với 3584 nhân CUDA để đẩy nhanh tốc độ hội tụ của XGBoost Survival Analysis. Kết quả kỳ vọng là mô hình học được các cây quyết định phức tạp chỉ trong thời gian tính bằng giây sau khi phase data pipeline đã hoàn tất.
+
+\noindent
+\fbox{\parbox{0.96\linewidth}{
+\small
+\textbf{Code snippet suggestion:} Chèn mã Python minh họa luồng join giữa \texttt{patients} và \texttt{admissions}, sau đó dùng \texttt{ray.data.read\_parquet(...)} và \texttt{map\_batches(preprocess)} để tạo feature table từ \texttt{chartevents}, cuối cùng stream Gold Data qua \texttt{iter\_torch\_batches()} hoặc DataConfig của Ray Train sang worker GPU.
+}}
+
+\textit{Gợi ý trình bày:} đặt đoạn mã minh họa này ngay sau phần mô tả cơ chế handoff giữa Ray Data và Ray Train.
+
+\paragraph{TO DO}
+\begin{itemize}
+    \item Thay khối ``Code snippet suggestion'' bằng code Python thật, đủ ngắn để lên paper nhưng đủ rõ luồng dữ liệu.
+    \item Điền số liệu thật về kích thước dữ liệu: raw input khoảng bao nhiêu GB, Gold Data sau nén còn bao nhiêu MB, số hàng và số cột đặc trưng cuối cùng.
+    \item Ghi rõ cách Gold Data được nạp vào GPU và thời gian huấn luyện thực tế để chứng minh luận điểm ``ultra-fast convergence on dense features''.
+    \item Nếu có log hoặc screenshot từ phase training, trích phần thể hiện thời gian train ngắn và GPU utilization cao thay vì nhấn mạnh bài toán VRAM.
+    \item Thêm một hình luồng dữ liệu ``Raw Tables $\rightarrow$ Gold Data $\rightarrow$ In-memory Training on GPU'' để minh họa đúng luận điểm mới.
+\end{itemize}

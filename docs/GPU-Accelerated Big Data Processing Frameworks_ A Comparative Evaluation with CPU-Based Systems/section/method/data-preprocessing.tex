@@ -1,0 +1,129 @@
+\subsection{Tiền xử lý dữ liệu}
+Với số hành tinh $n$, trong thời gian quan sát $t$, có $s$ điểm chụp trong không gian và $wl$ bước sóng, một đầu vào của quy trình tiền xử lý sẽ 
+là một tensor có kích thước \textbf{$n \times t \times s \times wl$}. Qua các bước xử lý bên dưới, giả sử ta lấy $a$ bin theo trục thời gian,
+lấy trung bình theo trục không gian và $b$ đến $c$ theo trục bước sóng, ta thu được tensor đầu ra có kích thước \textbf{$n \times \frac{t}{a} \times (c-b+1)$}.
+% Cụ thể quy trình xử lý với cho từng phương pháp xem ở Phụ lục ~\ref{sec:preprocessing}.
+
+
+Dưới đây là quy trình tuần tự gồm các bước hiệu chỉnh để xử lý dữ liệu thô chứa
+nhiều tạp nhiễu vật lý sử dụng 5 tệp dữ liệu hiệu chuẩn:
+\begin{itemize}
+  \item dark: ảnh tối, chụp khi không có ánh sáng (đóng shutter), dùng để loại bỏ dòng tối, mỗi giá trị pixel là nhiễu được thêm vào tín hiệu trong 1 giây
+  \item dead: xác định dead pixels, đồng thời cũng được dùng để xác định những hot pixels
+  \item flat: mỗi giá trị pixel thể hiện độ nhạy của điểm ảnh đó trong cảm biến, dùng để chuẩn hoá sự khác biệt độ nhạy
+        giữa các pixel
+  \item linear\_corr: đa thức hiệu chỉnh phi tuyến tính của cảm biến
+  \item read: ảnh mô tả nhiễu đọc của cảm biến
+\end{itemize}
+\subsubsection{Đảo ngược chuyển đổi ADC (Analog-to-Digital Converter)}
+Tín hiệu thu dưới dạng số nguyên (unit16) nhờ bộ chuyển đổi ADC. Ta phục hồi giá trị thực
+(float) của signal bằng công thức:
+\begin{equation}
+  signal = \frac{raw}{gain} + offset
+\end{equation}
+
+Trong đó, $raw$ là giá trị thu được từ các cảm biến, $gain$ là hệ số khuếch đại và $offset$ là độ lệch.
+
+Ví dụ, gain = 0.4369 và offset = -1000 cố định cho ADC2025 (Bạn có thể tìm thấy các giá trị này trong tệp \texttt{adc\_info.csv}).
+
+\subsubsection{Điểm chết (dead pixels) và điểm nóng (hot pixels)}
+Trong quá trình xử lý tín hiệu từ cảm biến, hai loại lỗi phổ biến cần được loại bỏ là \textit{điểm chết} (dead pixels) và \textit{điểm nóng} (hot pixels).
+
+\begin{itemize}
+  \item \textbf{Điểm chết (dead pixels)} là các pixel không phản ứng với ánh sáng, tức luôn ghi nhận giá trị rất thấp hoặc bằng 0, bất kể tín hiệu thực tế.
+  \item \textbf{Điểm nóng (hot pixels)} là các pixel có giá trị bất thường cao, ngay cả trong điều kiện không có ánh sáng, thường do lỗi điện tử hoặc nhiễu nhiệt.
+\end{itemize}
+
+Để phát hiện các điểm nóng, thuật toán \texttt{sigma\_clip} từ thư viện \texttt{astropy} được áp dụng trên dữ liệu ảnh tối (\texttt{dark}).
+Thuật toán này lặp lại việc loại bỏ các pixel có giá trị vượt quá ngưỡng $5\sigma$ so với trung bình của các pixel lân cận. Sau một số lần lặp, mặt nạ (mask) của các điểm nóng được tạo ra.
+
+Các điểm nóng và điểm chết sau đó được đưa vào mặt nạ hiệu chuẩn \texttt{flat} (ta sẽ nói về \texttt{flat} ở phần cuối cùng), gán giá trị \texttt{NaN} nhằm loại trừ khỏi quá trình hiệu chỉnh:
+
+\subsubsection{Non-linearity correction}
+Các pixel trong cảm biến không luôn phản hồi tuyến tính với cường độ ánh sáng chiếu vào.
+Khi tín hiệu gần đạt đến mức bão hoà, các pixel sẽ tích điện chậm lại, dẫn đến sai lệch giữa tín hiệu đo được và giá trị thực.
+Để hiệu chỉnh sai lệch này, một đa thức (thường là bậc hai hoặc cao hơn) được sử dụng với các hệ số được lưu trong biến \textit{linear\_corr}.
+Trong notebook của chúng tôi, chúng tôi áp dụng một đa thức bậc 5 để hiệu chỉnh tín hiệu, như sau:
+{\footnotesize
+\begin{equation}
+  linear\_corr = a \cdot raw^5 + b \cdot raw^4 + c \cdot raw^3 + d \cdot raw^2 + e \cdot raw + f
+\end{equation}
+}
+
+Trong đó, các hệ số được xác định thông qua dữ liệu trong file \textit{linear\_corr.parquet}.
+
+Chú ý rằng, trước khi áp dụng hiệu chỉnh, tín hiệu nên được clip về 0 vì dữ liệu sẽ có thể có một số pixel với giá trị âm do bước ADC convert ở phần 1 với offset là giá trị âm,
+chúng được gây ra bởi nhiễu ngẫu nhiên mà đã được đưa vào tập dữ liệu trong quá trình mô phỏng. Đôi khi điều này xảy ra khi tín hiệu quá yếu. Mặt khác, đa thức mà dữ liệu bài toán cho để hiệu chỉnh
+ở trên không hoạt động hiệu quả để xử lý các giá trị âm vì chúng dường như đã được fit từ những giá trị dương. Do đó, nếu giữ nguyên các giá trị âm đó thì
+sẽ gây sai lệch lớn trong quá trình hiệu chỉnh.
+
+\subsubsection{Dark frames}
+Khung tối là ảnh phơi sáng được chụp với màn trập đóng, ghi lại nhiễu nhiệt và độ lệch của cảm biến. Chúng được sử dụng để loại bỏ dòng tối khỏi ảnh.
+
+\begin{equation}
+  signal = signal - dark \cdot \Delta t
+\end{equation}
+
+với $\Delta t$ là tổng thời gian phơi sáng của ảnh (thông tin về integration time có thể được tìm thấy trong file \texttt{axis\_info.parquet}).
+
+Khi bạn mở file axis\_info.parquet, bạn sẽ thấy cột \textit{integration\_time} chứa thời gian phơi sáng của từng khung hình chỉ bao gồm các giá trị 0.1s và 4.5s.
+Điều này phù hợp với các thông số kỹ thuật của cảm biến FGS1 và AIRS-CH0. Hãy để chúng tôi nói rõ hơn về cách hoạt động của 2 cảm biến này.
+Cảm biến hoạt động ở chế độ \textbf{CDS (Correlated Double Sampling)}, nghĩa là sẽ hoạt động theo các chu kỳ gọi là \texttt{integration ramp}.
+Mỗi integration ramp bắt đầu với detector ở trạng thái ban đầu, tích điện được kích hoạt thời điểm này. Sau 0.1 giây, nó sẽ đọc tín hiệu đầu tiên (NDR0). Quá trình đọc 1 frame mất 0.1s, nhưng giả thuyết bài toán này không sử dụng phương pháp đọc tuần tự
+mà thay vào đó, tất cả pixel được đọc đồng thời. Sau khi NDR0 được chụp, detector sẽ chuyển sang giai đoạn đợi chờ để thu thập ánh sáng. Khoảng thời gian chờ này chính là cột integration time trong tập dữ liệu.
+Sau pha chờ này, detector sẽ đọc tín hiệu lần thứ hai (NDR1) và cuối cùng là reset detector để chuẩn bị cho ramp tiếp theo. Quá trình reset này cũng cần 0.1 giây.
+Bạn có thể kiểm tra điều này bằng cách so sánh dòng thời gian của các khung hình với thời gian tích hợp (trong file \texttt{axis\_info.parquet}). Để tham khảo, đây là dòng thời gian của hai máy dò:
+\begin{itemize}
+  \item \textbf{FGS1 (integration time = wait = \SI{0.1}{\second}):}
+
+        \begin{tabbing}
+          \hspace{4em} \= \kill
+          \texttt{|--ground--|--NDR0--|--wait--|--NDR1--|--reset--|} \\
+          \texttt{0.0} \> \texttt{0.1 \hspace{2em} 0.2 \hspace{1em} 0.3 \hspace{1em} 0.4 \hspace{2em} 0.5}
+        \end{tabbing}
+
+  \item \textbf{AIRS (integration time = wait = \SI{4.5}{\second}):}
+
+        \begin{tabbing}
+          \hspace{4em} \= \kill
+          \texttt{|--ground--|--NDR0--|--wait--|--NDR1--|--reset--|} \\
+          \texttt{0.0} \> \texttt{0.1 \hspace{2em} 0.2  \hspace{1em} 4.7 \hspace{1em} 4.8 \hspace{2em} 4.9}
+        \end{tabbing}
+\end{itemize}
+
+Như vậy, ta cần chú ý ở đây rằng: thời gian phơi sáng các frame đầu tiên ở 2 cảm biến sẽ đều là 0.1 giây (do pha ground kéo dài 0.1 giây). Sự khác nhau giữa 2 cảm biến nằm ở frame2.
+Với giả thuyết các pixel được chụp đồng thời thì tổng thời gian phơi sáng $\Delta t$ của frame 2 ở FGS1 là 0.2 giây, với AIRS là 4.6 giây.
+
+\subsubsection{Flat field correction}
+Lý do cho việc hiệu chỉnh flat field là để loại bỏ sự khác biệt về độ nhạy giữa các pixel trong cảm biến.
+Cảm biến trong máy ảnh không hoàn hảo, có pixel nhạy hơn, có pixel kém nhạy hơn, có thể có bóng mờ, bụi, hay sự không đồng đều trong hệ quang học.
+Do đó, khi chụp một vùng sáng đồng đều (ví dụ: ánh sáng trắng trải đều), ảnh thu được không hề đồng đều, mà có vùng sáng – vùng tối do sự khác biệt trong cảm biến.
+Vì vậy, để thu được độ nhạy cảm mỗi pixel, người ta chụp một ảnh với nguồn sáng đồng đều, ảnh thu được gọi là flat field, mỗi  pixel trong ảnh này thể hiện độ nhạy sáng của pixel đó.
+Tín hiệu mà ta thu được sẽ tỉ lệ với độ nhạy của pixel nhân với tín hiệu thực tế từ bản chất ánh sáng đó.
+Do đó, với một ảnh bất kỳ thu được, để hiệu chỉnh nó để thu được tín hiệu thực từ nguồn sáng, ta phải thực hiện chia cho flat field (độ nhạy sáng của mỗi pixel).
+
+Tín hiệu pixel khác nhau do hiệu suất quang học khác nhau. Cần hiệu chỉnh bằng cách
+dùng flat mapping để chuẩn hoá:
+\begin{equation}
+  signal_{corrected} = \frac{signal}{flat\_field}
+\end{equation}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.8\linewidth]{figures/preprocess_pipeline.png}
+  \caption{Pipeline tiền xử lý dữ liệu}
+  \label{fig:preprocess_pipeline}
+\end{figure}
+\subsubsection{Correlated Double Sampling (CDS)}
+Trước khi tính CDS, ta cần làm gọn dữ liệu bằng cách loại bỏ đi các phần không quan trọng của frame, cũng như làm một số thao tác để lấy ra con số biểu diễn chung nhất cho một frame.
+Sau đó, ta tính CDS bằng cách lấy hiệu ảnh chụp được lúc kết thúc và bắt đầu của mỗi ramp, cụ thể là:
+
+
+\begin{equation}
+  CDS = signal_{end} - signal_{start}
+\end{equation}
+
+\subsubsection{Binning}
+Binning là quá trình kết hợp tín hiệu của nhiều bước thời gian thành một để tiết kiệm không gian bộ nhớ cũng như tính toán. Điều này không làm giảm hiệu quả của model vì ta nhận thấy,
+các hành tinh di chuyển rất chậm, do đó, các ảnh liên tiếp nhau không có sự khác nhau nhiều nên việc binning sẽ không làm mất đi thông tin quan trọng mà còn giảm được nhiễu nhờ cách tính trung bình trên mỗi bin.
+

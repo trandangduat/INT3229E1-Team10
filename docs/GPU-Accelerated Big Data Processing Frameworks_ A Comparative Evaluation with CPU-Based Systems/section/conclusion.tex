@@ -1,0 +1,38 @@
+\section{Key Insights, Recommendations \& Future Work}
+
+\subsection{Key Insights}
+Kết quả của nghiên cứu cho thấy giá trị lớn nhất của Ray không chỉ nằm ở việc tăng tốc một tác vụ phân tán riêng lẻ, mà ở khả năng hợp nhất toàn bộ vòng đời dữ liệu và AI trong cùng một nền tảng tính toán. Với bài toán MIMIC-IV, kiến trúc này giúp loại bỏ một phần lớn chi phí chuyển giao dữ liệu giữa distributed join, ETL và huấn luyện, đồng thời làm cho pipeline phù hợp hơn với các workload đa bảng có tính dị thể cao. Quan trọng hơn, việc tách rời lưu trữ và tính toán thông qua head node, HDFS và edge GPU node cho thấy Big Data không nhất thiết đòi hỏi hạ tầng đắt đỏ tập trung; ngược lại, phần cứng tiêu dùng sẵn có vẫn có thể được điều phối hiệu quả nếu có đúng runtime phân tán.
+
+Một phát hiện quan trọng khác là kiến trúc cloud-edge qua Tailscale giúp ``bình dân hóa'' Big Data và AI y tế. Bằng cách đặt tầng lưu trữ và điều phối ở cloud/head node, còn tầng tăng tốc ở edge node có GPU tiêu dùng, hệ thống vẫn duy trì được tính thống nhất end-to-end mà không cần đầu tư vào một máy chủ GPU đắt tiền. Với PREDICTCARE AI, đây là luận điểm công nghệ có ý nghĩa triển khai thực tiễn cao.
+
+\paragraph{TO DO}
+\begin{itemize}
+    \item Sau khi có kết quả thực nghiệm, rút ra 2--3 insight thật sắc bén thay cho các nhận định còn mang tính kỳ vọng.
+    \item Viết lại insight theo cấu trúc ``finding $\rightarrow$ evidence $\rightarrow$ implication'' để phần kết luận mạnh hơn.
+    \item Bảo đảm mỗi insight đều truy ngược được về số liệu hoặc hình ở phần evaluation.
+\end{itemize}
+
+\subsection{Recommendations}
+Từ góc nhìn triển khai hệ thống, chúng tôi khuyến nghị nhóm PREDICTCARE AI xem Ray như \textit{core engine} mới cho pipeline phân tích lâm sàng quy mô lớn. Ray Data nên được dùng để thay thế lớp ETL phân mảnh trước đây, đặc biệt trong các bước multi-table join giữa \textit{patients}, \textit{admissions} và \textit{chartevents}. Trong khi đó, Ray Train nên đảm nhiệm pha huấn luyện XGBoost Survival Analysis trên GPU. Cách tiếp cận này mang lại ba lợi ích rõ ràng: giảm overhead do disk I/O trung gian, tăng khả năng tận dụng tài nguyên không đồng nhất, và đơn giản hóa stack phát triển khi toàn bộ pipeline được mô tả bằng Python.
+
+Một khuyến nghị thực tiễn khác là ưu tiên duy trì kiến trúc \textit{decoupled compute \& storage}. Việc head node phụ trách điều phối và truy cập dữ liệu, còn edge node tập trung cho huấn luyện, là một cấu hình đặc biệt phù hợp với môi trường nghiên cứu hoặc startup có ngân sách phần cứng hạn chế nhưng vẫn muốn tiếp cận năng lực phân tích quy mô lớn.
+
+\paragraph{TO DO}
+\begin{itemize}
+    \item Viết recommendation theo mức độ ưu tiên: ngắn hạn, trung hạn, dài hạn để người đọc thấy khả năng triển khai thực tế.
+    \item Gắn mỗi recommendation với điều kiện áp dụng, ví dụ khi dữ liệu tăng quy mô bao nhiêu hoặc khi team cần huấn luyện trên GPU consumer.
+    \item Bổ sung một câu nêu rõ khi nào Ray chưa phải lựa chọn tốt nhất để recommendation cân bằng và đáng tin hơn.
+\end{itemize}
+
+\subsection{Future Work}
+Hướng phát triển tiếp theo của đề tài là mở rộng Ray từ tầng xử lý và huấn luyện sang tầng phục vụ mô hình. Cụ thể, Ray Serve có thể được dùng để triển khai mô hình XGBoost Survival Analysis thành API cho PREDICTCARE AI, cho phép dashboard hoặc ứng dụng lâm sàng truy cập trực tiếp hazard ratio và survival probability curve của từng bệnh nhân. Xa hơn, hệ thống có thể kết hợp với các Large Language Models để xây dựng giao diện hỏi đáp bằng ngôn ngữ tự nhiên, giúp bác sĩ tương tác với kết quả đường cong sinh tồn hoặc nhận giải thích lâm sàng một cách trực quan hơn.
+
+Ngoài ra, nghiên cứu tương lai nên đánh giá sâu hơn trên các cấu hình nhiều GPU hoặc nhiều edge node, cũng như bổ sung các thước đo định lượng về network throughput, memory footprint và chi phí vận hành. Những kết quả này sẽ giúp hoàn thiện luận điểm rằng Ray không chỉ phù hợp cho proof-of-concept học thuật, mà còn có tiềm năng trở thành nền tảng sản xuất thực sự cho phân tích y tế quy mô lớn.
+
+\paragraph{TO DO}
+\begin{itemize}
+    \item Tách hướng tương lai thành 3 nhánh rõ ràng: serving, scale-out multi-GPU/multi-node, và giao diện tương tác với LLM.
+    \item Viết cụ thể từng nhánh cần làm gì đầu tiên, ví dụ: expose API nào qua Ray Serve, cần artifact nào để dựng survival curve online.
+    \item Thêm một câu về đánh giá đạo đức hoặc kiểm định lâm sàng nếu hệ thống được đưa gần hơn tới môi trường thực tế.
+    \item Liên hệ future work với Topic 3 của giảng viên một cách tự nhiên, tránh làm đoạn này trở nên rời rạc với phần thân bài.
+\end{itemize}

@@ -1,0 +1,12 @@
+% \subsection{Chi tiết về tiền xử lý dữ liệu} \label{sec:preprocessing}
+% \subsubsection{Phân tích dữ liệu đầu ra}
+
+% Phân tích file \textbf{wavelength.csv} để lấy ra bước sóng có trong test, phân tích bước sóng có trong tập \textbf{axis\_info.parquet}, ta biết được
+% bước sóng đầu $wl_1$ trong kết quả đầu ra mong muốn là của FGS1, 282 bước sóng còn lại lần lượt tương ứng với bước sóng từ 321 tới 39 (ứng với $wl_2$ tới $wl_{283}$).
+
+% \subsubsection{Phương pháp không học máy}
+
+% Dữ liệu đầu vào là tensor dạng (n, t, s, wl), trong đó n là số hành tinh, t là thời gian quan sát, s là số điểm chụp trong không gian và wl là bước sóng.
+% Ta xử lý dữ liệu từ \textbf{AIRS-CH0} bằng cách áp dụng các bước tiền xử lý, từ file parquet ta reshape về dạng [11250, 32, 356], lấy binning là 30 theo thời gian, 
+% lấy trung bình theo không gian và lấy bước sóng từ 39 đến 321, thu được tensor [187, 282]. Với dữ liệu từ \textbf{FGS1}, ta reshape về dạng [11250, 32, 32], lấy binning là 30 theo thời gian, 
+% lấy trung bình theo không gian và toàn bộ bước sóng, đầu ra sẽ có dạng [187, 1].
