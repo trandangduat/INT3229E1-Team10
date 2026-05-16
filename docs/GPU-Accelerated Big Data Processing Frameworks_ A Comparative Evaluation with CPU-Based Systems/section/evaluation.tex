@@ -39,34 +39,34 @@ Phân tích chi tiết về từng phase:
 
 \subsection{Model Performance \& ML Metrics}
 
-Phần này đánh giá kết quả của mô hình XGBoost dự báo tái nhập viện 30 ngày được huấn luyện trên Gold Dataset từ Ray pipeline.
+Phần này đánh giá đúng theo notebook gốc của nhóm, tức là bài toán survival analysis với metric chính là C-index (concordance index), không phải ROC AUC. Notebook \texttt{predictcare-new_readmission.ipynb} dùng \texttt{CoxPHFitter} và \texttt{XGBSEStackedWeibull}, sau đó báo cáo C-index trên train/validation/test.
 
-\subsubsection{30-Day Readmission Prediction Results}
+\subsubsection{Survival Prediction Results}
 
 \begin{table}[h!]
 \centering
 \small
 \begin{tabular}{|l|r|r|r|}
 \hline
-\textbf{Metric} & \textbf{Train Set} & \textbf{Val Set} & \textbf{Test Set} \\
+\textbf{Metric} & \textbf{Train Set} & \textbf{Validation} & \textbf{Test} \\
 \hline
 Number of Samples & 235,441 & 49,738 & 46,129 \\
 Readmission Rate (\%) & 18.16 & 18.34 & 18.74 \\
-AUC (ROC) & 0.7205 & 0.6796 & 0.6611 \\
+C-index (XGBSE) & 0.8087 & 0.7860 & 0.7813 \\
 Best Iteration & \multicolumn{3}{c|}{189 (early stop on val)} \\
 \hline
 \end{tabular}
-\caption{XGBoost Readmission Model Performance (Ray MIMIC Pipeline)}
-\label{table:xgboost_metrics}
+\caption{XGBSE Survival Model Performance (Ray MIMIC Notebook Baseline)}
+\label{table:xgbse_metrics}
 \end{table}
 
-Model được huấn luyện với 108 features (vitals aggregates, lab aggregates, và ICD chapter indicators). Kết quả cho thấy:
+Notebook cũng cho baseline Cox PH với C-index trên train/validation lần lượt là 0.7225 và 0.7234, sau đó mô hình XGBSE cải thiện lên 0.7813 trên test. Đây là metric phù hợp với specification của bài thực hành: tối ưu C-index trên test set và hướng tới C-index \geq 0.70.
 
 \begin{itemize}
-    \item \textbf{Test AUC = 0.6611:} Mô hình đạt hiệu suất khỏe mạnh ở tập test không nhìn thấy, cho thấy Ray data pipeline đã tạo features chất lượng cao mà không bị data leakage.
-    \item \textbf{Generalization gap (Train → Test):} 0.7205 → 0.6611 = 0.0594 (5.94\%), cho thấy mô hình không overfit quá mức.
+    \item \textbf{Test C-index = 0.7813:} Mô hình đạt hiệu suất tốt trên tập test không nhìn thấy, cho thấy feature pipeline từ Ray/Gold dataset đủ mạnh cho survival analysis.
+    \item \textbf{Generalization gap (Train → Test):} 0.8087 → 0.7813 = 0.0274 (2.74\%), cho thấy mô hình tổng quát hóa khá tốt.
     \item \textbf{Early stop:} Tại iteration 189, model ngừng cải thiện trên validation set, tránh được overfitting.
-    \item \textbf{Feature engineering:} Ray's map\_batches operations cho phép tính toán efficient 23 lab features + 4 vital sign aggregates + 21 ICD chapters mà không materialize dữ liệu thô toàn bộ.
+    \item \textbf{Feature engineering:} Ray's map\_batches operations cho phép tính toán efficient 23 lab features + vital sign aggregates + 21 ICD chapters mà không materialize dữ liệu thô toàn bộ.
 \end{itemize}
 
 \subsection{Resource Utilization \& System Efficiency}

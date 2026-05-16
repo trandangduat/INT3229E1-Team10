@@ -41,11 +41,11 @@ Successful implementation and execution of a complete **Ray-based ETL + ML pipel
 
 ## 🤖 ML Model Performance
 
-### XGBoost 30-Day Readmission Prediction
+### XGBSE Survival Prediction
 
 | Metric | Train | Validation | Test |
 |--------|-------|------------|------|
-| **AUC (ROC)** | 0.7205 | 0.6796 | **0.6611** |
+| **C-index** | 0.8087 | 0.7860 | **0.7813** |
 | Sample Count | 235,441 | 49,738 | 46,129 |
 | Readmission Rate | 18.16% | 18.34% | 18.74% |
 
@@ -53,7 +53,7 @@ Successful implementation and execution of a complete **Ray-based ETL + ML pipel
 - Best iteration: 189 (early stop on validation set)
 - Features: 108 (after removing ID columns)
 - GPU Training: 9.69s with NVIDIA RTX 3060
-- Generalization Gap: 5.94% (train→test), indicating good generalization
+- Generalization Gap: 2.74% (train→test), indicating good generalization
 
 ## 💾 Resource Utilization
 
@@ -113,7 +113,7 @@ readmission_metrics.json   (Model evaluation metrics in JSON)
 
 ✅ **Efficiency**: 46 minutes end-to-end for complete pipeline (comparable to optimized Spark)
 
-✅ **Model Quality**: Test AUC 0.6611 indicates good predictive signal and feature engineering
+✅ **Model Quality**: Test C-index 0.7813 indicates good predictive signal and feature engineering
 
 ✅ **Code Simplicity**: ~60KB Python code across 6 scripts (modular, testable, debuggable)
 
@@ -187,7 +187,7 @@ Results have been integrated into the LaTeX report:
 ## 🔗 Git Commits
 
 ```
-bcdae9a - feat: complete Ray MIMIC-IV pipeline - all 6 steps with XGBoost (AUC: 0.6611)
+bcdae9a - feat: complete Ray MIMIC-IV pipeline - all 6 steps done with XGBoost readmission model
 5238944 - docs: update evaluation.tex with Ray pipeline execution results
 ```
 
@@ -202,8 +202,8 @@ bcdae9a - feat: complete Ray MIMIC-IV pipeline - all 6 steps with XGBoost (AUC: 
    - This is expected behavior from MIMIC-IV structure
 
 3. **Early Stopping**: XGBoost stopped at iteration 189 (vs 219 max)
-   - Validation AUC plateaued around 0.68
-   - Prevents overfitting at the cost of slightly lower training AUC
+   - Validation C-index plateaued around 0.79
+   - Prevents overfitting at the cost of slightly lower training C-index
 
 4. **GPU Utilization**: ~10% of XGBoost time is GPU (most time in data transfer)
    - Dataset fits entirely in 12GB RTX 3060 VRAM
