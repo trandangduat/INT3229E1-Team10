@@ -39,7 +39,7 @@ Phân tích chi tiết về từng phase:
 
 \subsection{Model Performance \& ML Metrics}
 
-Phần này đánh giá đúng theo notebook gốc của nhóm, tức là bài toán survival analysis với metric chính là C-index (concordance index), không phải ROC AUC. Notebook \texttt{predictcare-new_readmission.ipynb} dùng \texttt{CoxPHFitter} và \texttt{XGBSEStackedWeibull}, sau đó báo cáo C-index trên train/validation/test.
+Phần này đánh giá theo đúng code Ray đang chạy trên máy hiện tại, tức là bài toán survival analysis với metric chính là C-index (concordance index), không phải ROC AUC. Bản Ray single-node này loại bỏ notes và eICU theo phạm vi bài tập, rồi huấn luyện mô hình survival trên Gold Dataset.
 
 \subsubsection{Survival Prediction Results}
 
@@ -52,20 +52,20 @@ Phần này đánh giá đúng theo notebook gốc của nhóm, tức là bài t
 \hline
 Number of Samples & 235,441 & 49,738 & 46,129 \\
 Readmission Rate (\%) & 18.16 & 18.34 & 18.74 \\
-C-index (XGBSE) & 0.8087 & 0.7860 & 0.7813 \\
-Best Iteration & \multicolumn{3}{c|}{189 (early stop on val)} \\
+C-index (Ray survival model) & 0.7373 & 0.6775 & 0.6559 \\
+Best Iteration & \multicolumn{3}{c|}{466 (early stop on val)} \\
 \hline
 \end{tabular}
-\caption{XGBSE Survival Model Performance (Ray MIMIC Notebook Baseline)}
+\caption{Ray Survival Model Performance (Single-node, no notes/eICU)}
 \label{table:xgbse_metrics}
 \end{table}
 
-Notebook cũng cho baseline Cox PH với C-index trên train/validation lần lượt là 0.7225 và 0.7234, sau đó mô hình XGBSE cải thiện lên 0.7813 trên test. Đây là metric phù hợp với specification của bài thực hành: tối ưu C-index trên test set và hướng tới C-index \geq 0.70.
+Trong lần chạy Ray hiện tại, mô hình survival cho C-index trên train/validation/test lần lượt là 0.7373 / 0.6775 / 0.6559. Kết quả này khớp với phạm vi bài tập hiện tại vì không dùng notes và eICU, nên đây là con số nên đem so sánh trực tiếp với pipeline PySpark tương ứng.
 
 \begin{itemize}
-    \item \textbf{Test C-index = 0.7813:} Mô hình đạt hiệu suất tốt trên tập test không nhìn thấy, cho thấy feature pipeline từ Ray/Gold dataset đủ mạnh cho survival analysis.
-    \item \textbf{Generalization gap (Train → Test):} 0.8087 → 0.7813 = 0.0274 (2.74\%), cho thấy mô hình tổng quát hóa khá tốt.
-    \item \textbf{Early stop:} Tại iteration 189, model ngừng cải thiện trên validation set, tránh được overfitting.
+    \item \textbf{Test C-index = 0.6559:} Mô hình survival trên Ray đã thay thế hoàn toàn AUC bằng C-index đúng theo đặc tả.
+    \item \textbf{Generalization gap (Train → Test):} 0.7373 → 0.6559 = 0.0814 (8.14\%), cho thấy mô hình vẫn còn dư địa tinh chỉnh khi chỉ dùng feature MIMIC không có notes/eICU.
+    \item \textbf{Early stop:} Tại iteration 466, model ngừng cải thiện trên validation set, tránh được overfitting.
     \item \textbf{Feature engineering:} Ray's map\_batches operations cho phép tính toán efficient 23 lab features + vital sign aggregates + 21 ICD chapters mà không materialize dữ liệu thô toàn bộ.
 \end{itemize}
 

@@ -1,16 +1,16 @@
 """
 06_train_readmission.py — Ray Pipeline Step 6
-Train XGBoost model for 30-day readmission prediction using Ray Train.
+Train an XGBoost readmission risk model and evaluate it with C-index.
 
 Based on logic from:
-  - src/predictcare-new_readmission.ipynb
+    - src/predictcare-new_readmission.ipynb
 
 Pipeline:
-  1. Load Gold dataset (train/val/test splits)
-  2. Preprocess (impute missing, encode gender)
-  3. Train XGBoost classifier for readmission
-  4. Evaluate (C-index / AUC on val + test)
-  5. Log metrics + save model
+    1. Load Gold dataset (train/val/test splits)
+    2. Preprocess (impute missing, encode gender)
+    3. Train XGBoost risk model for readmission
+    4. Evaluate with concordance index (C-index)
+    5. Log metrics + save model
 """
 
 import ray
@@ -22,7 +22,7 @@ import json
 import os
 from pathlib import Path
 from sklearn.impute import SimpleImputer
-from sklearn.metrics import roc_auc_score
+from lifelines.utils import concordance_index
 import xgboost as xgb
 import sys
 
@@ -104,16 +104,26 @@ print(f"[METRIC] Test  readmission rate: {E_test.mean()*100:.2f}%")
 log_stage("preprocess", t)
 
 # ─── 3. Train XGBoost ───────────────────────────────────────────────────────
-print("\n[STEP 6.3] Training XGBoost for 30-day readmission ...")
+print("\n[STEP 6.3] Training XGBoost for 30-day readmission risk ...")
 t = start_timer()
 
-dtrain = xgb.DMatrix(X_train, label=E_train.values)
-dval   = xgb.DMatrix(X_val,   label=E_val.values)
-dtest  = xgb.DMatrix(X_test,  label=E_test.values)
+def make_survival_labels(times: pd.Series, events: pd.Series) -> np.ndarray:
+    times_array = times.astype(float).to_numpy()
+    events_array = events.astype(int).to_numpy()
+    # Positive time = observed event, negative time = censored observation.
+    return np.where(events_array == 1, times_array, -times_array)
+
+train_labels = make_survival_labels(T_train, E_train)
+val_labels   = make_survival_labels(T_val,   E_val)
+test_labels  = make_survival_labels(T_test,  E_test)
+
+dtrain = xgb.DMatrix(X_train, label=train_labels)
+dval   = xgb.DMatrix(X_val,   label=val_labels)
+dtest  = xgb.DMatrix(X_test,  label=test_labels)
 
 params = {
-    "objective":  "binary:logistic",
-    "eval_metric": "auc",
+    "objective":  "survival:cox",
+    "eval_metric": "cox-nloglik",
     "tree_method": "hist",
     "max_depth":   6,
     "eta":         0.05,
@@ -155,15 +165,15 @@ y_train_pred = model.predict(dtrain)
 y_val_pred   = model.predict(dval)
 y_test_pred  = model.predict(dtest)
 
-train_auc = roc_auc_score(E_train.values, y_train_pred)
-val_auc   = roc_auc_score(E_val.values,   y_val_pred)
-test_auc  = roc_auc_score(E_test.values,  y_test_pred)
+train_c_index = concordance_index(T_train.values, -y_train_pred, E_train.values)
+val_c_index   = concordance_index(T_val.values,   -y_val_pred,   E_val.values)
+test_c_index  = concordance_index(T_test.values,  -y_test_pred,  E_test.values)
 
-print(f"\n[RESULT] === 30-day Readmission Prediction ===")
+print(f"\n[RESULT] === 30-day Readmission Prediction (C-index) ===")
 print(f"[RESULT] Best iteration: {model.best_iteration}")
-print(f"[RESULT] Train AUC: {train_auc:.4f}")
-print(f"[RESULT] Val   AUC: {val_auc:.4f}")
-print(f"[RESULT] Test  AUC: {test_auc:.4f}")
+print(f"[RESULT] Train C-index: {train_c_index:.4f}")
+print(f"[RESULT] Val   C-index: {val_c_index:.4f}")
+print(f"[RESULT] Test  C-index: {test_c_index:.4f}")
 log_stage("evaluate", t)
 
 # ─── 5. Save model + metrics ────────────────────────────────────────────────
@@ -174,9 +184,9 @@ print(f"[INFO] Model saved to: {model_path}")
 
 metrics = {
     "task": "30-day readmission",
-    "train_auc":       round(train_auc, 4),
-    "val_auc":         round(val_auc,   4),
-    "test_auc":        round(test_auc,  4),
+    "train_c_index":   round(train_c_index, 4),
+    "val_c_index":     round(val_c_index,   4),
+    "test_c_index":    round(test_c_index,  4),
     "best_iteration":  model.best_iteration,
     "train_rows":      len(df_train),
     "val_rows":        len(df_val),
