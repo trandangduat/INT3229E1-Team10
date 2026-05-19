@@ -12,9 +12,22 @@ SILVER_TABLES = {
             "hadm_id",
             "admittime",
             "dischtime",
+            "index_time",
             "admityear",
             "duration_days",
             "age",
+            "gender",
+            "admission_type",
+            "insurance",
+            "marital_status",
+            "race",
+            "discharge_location",
+            "readmission_time_days",
+            "readmission_event_30d",
+            "event_flag_readmission",
+            "mortality_time_days",
+            "mortality_time_months",
+            "mortality_event_12m",
             "event_flag_mortality",
         ],
         "required_non_null": [
@@ -22,7 +35,14 @@ SILVER_TABLES = {
             "hadm_id",
             "admittime",
             "dischtime",
+            "index_time",
             "admityear",
+            "duration_days",
+            "age",
+            "event_flag_readmission",
+            "event_flag_mortality",
+            "readmission_time_days",
+            "mortality_time_days",
         ],
         "distinct_key": "hadm_id",
     },
@@ -48,6 +68,7 @@ SILVER_TABLES = {
             "icd_code",
             "icd_version",
             "is_primary_diagnosis",
+            "primary_icd_code",
         ],
         "required_non_null": [
             "subject_id",
@@ -164,6 +185,36 @@ def validate_table(spark, base_path, table_name, config):
     distinct_key_count = df.select(config["distinct_key"]).distinct().count()
     print(f"[METRIC] Distinct {config['distinct_key']}: {distinct_key_count}")
 
+    if table_name == "admissions":
+        print("[INFO] Running admissions label-range checks...")
+        readm_bad_event = df.filter(
+            (col("readmission_event_30d") == 1)
+            & ~(
+                (col("readmission_time_days") >= 1)
+                & (col("readmission_time_days") <= 30)
+            )
+        ).count()
+        readm_bad_nonevent = df.filter(
+            (col("readmission_event_30d") == 0) & (col("readmission_time_days") != 30)
+        ).count()
+        mort_bad_event = df.filter(
+            (col("mortality_event_12m") == 1)
+            & ~((col("mortality_time_days") >= 1) & (col("mortality_time_days") <= 365))
+        ).count()
+        mort_bad_nonevent = df.filter(
+            (col("mortality_event_12m") == 0) & (col("mortality_time_days") != 365)
+        ).count()
+
+        print(f"[METRIC] Invalid readmission event rows: {readm_bad_event}")
+        print(f"[METRIC] Invalid readmission non-event rows: {readm_bad_nonevent}")
+        print(f"[METRIC] Invalid mortality event rows: {mort_bad_event}")
+        print(f"[METRIC] Invalid mortality non-event rows: {mort_bad_nonevent}")
+
+        if any([readm_bad_event, readm_bad_nonevent, mort_bad_event, mort_bad_nonevent]):
+            print("[FAIL] Admissions label-range checks failed")
+            return False
+        print("[PASS] Admissions label-range checks")
+
     print("[INFO] Schema:")
     df.printSchema()
     return True
@@ -171,6 +222,7 @@ def validate_table(spark, base_path, table_name, config):
 
 def validate_relationships(spark, base_path):
     print("\n=== relationships ===")
+    all_passed = True
     admissions_path = f"{base_path}/silver/admissions"
     admissions = spark.read.parquet(admissions_path).select("hadm_id").distinct()
     admissions_count = admissions.count()
@@ -188,6 +240,9 @@ def validate_relationships(spark, base_path):
             print(f"[PASS] {table_name} hadm_id subset of admissions")
         else:
             print(f"[FAIL] {table_name} has orphan hadm_id")
+            all_passed = False
+
+    return all_passed
 
 
 def main():
@@ -213,11 +268,12 @@ def main():
             (table_name, validate_table(spark, base_path, table_name, config))
         )
 
+    relationships_passed = True
     if any(table == "admissions" and passed for table, passed in results):
-        validate_relationships(spark, base_path)
+        relationships_passed = validate_relationships(spark, base_path)
 
     print("\n=== summary ===")
-    all_passed = True
+    all_passed = relationships_passed
     for table_name, passed in results:
         status = "PASS" if passed else "FAIL"
         print(f"[{status}] {table_name}")

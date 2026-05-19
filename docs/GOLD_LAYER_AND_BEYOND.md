@@ -1,7 +1,14 @@
 # HƯỚNG DẪN PIPELINE: TỪ SILVER ĐẾN DASHBOARD
 **Dự án:** PREDICTCARE AI – CDSS Dashboard (Team 10)
+
 **Đối tượng đọc:** Tất cả thành viên, đặc biệt ML Engineer và Fullstack Developer
+
 **Mục đích:** Hiểu rõ dữ liệu đang có, dữ liệu cần tạo, và cách từng phần kết nối với nhau
+
+**Cập nhật kỹ thuật mới nhất (2026-05-19):**
+- Gold đọc trực tiếp `readmission_event_30d` và `mortality_event_12m` từ `silver/admissions`, không tự overwrite lại từ alias cũ.
+- `validate_gold.py` và `inspect_gold.py` đã hỗ trợ `--dataset-name` để validate/inspect dataset versioned (ví dụ `analytical_dataset_postdischarge_v2`).
+- `build_gold_dataset.py` có warning runtime khi dùng `--include-eicu` cho survival mortality 12 tháng; chỉ nên dùng cho external validation nếu chưa harmonize follow-up label tương ứng.
 
 ---
 
@@ -43,16 +50,20 @@ Dưới đây là 6 bảng Silver hiện có, giải thích từng bảng dùng 
 | `hadm_id` | Mã lần nhập viện (primary key) | Join với mọi bảng khác |
 | `subject_id` | Mã bệnh nhân | Nhóm bệnh nhân |
 | `admittime` | Thời điểm nhập viện | Tính thời gian, temporal split |
-| `dischtime` | Thời điểm xuất viện | Tính duration_days |
-| `duration_days` | Số ngày nằm viện | **Survival label T** – đầu vào cho mô hình |
-| `event_flag_mortality` | 1 = tử vong tại viện, 0 = sống | **Survival label E** cho bài toán tử vong |
+| `dischtime` | Thời điểm xuất viện | Mốc dự đoán, `index_time` |
+| `duration_days` | Số ngày nằm viện | **Feature** về length of stay |
+| `readmission_time_days` | Số ngày từ xuất viện đến nhập viện kế tiếp (censor at 30d) | Survival label T cho Task 1 |
+| `readmission_event_30d` | 1 = tái nhập trong 30 ngày | Survival label E cho Task 1 |
+| `mortality_time_days` | Số ngày từ xuất viện đến tử vong (censor at 365d) | Survival label T cho Task 2 |
+| `mortality_event_12m` | 1 = tử vong trong 12 tháng sau xuất viện | Survival label E cho Task 2 |
+| `event_flag_mortality` | Alias tương thích cho `mortality_event_12m` | Downstream compatibility |
 | `age` | Tuổi tại thời điểm nhập viện | Feature nhân khẩu học |
 | `gender` | Giới tính | Feature nhân khẩu học |
 | `admityear` | Năm nhập viện (de-identified) | Temporal split: train/val/test |
 
 **Tác động đến hệ thống:**
 - Đây là **base table** – mọi bảng Silver khác đều join vào đây qua `hadm_id`
-- `duration_days` + `event_flag_mortality` là **2 cột quan trọng nhất** cho mô hình survival – nếu thiếu hoặc sai, mô hình sẽ không học được
+- `index_time = dischtime` là mốc cốt lõi cho cả hai bài toán; `duration_days` chỉ là feature, còn survival label phải dùng các cột `readmission_*` và `mortality_*` theo discharge time
 - `admityear` quyết định temporal split: năm nào dùng train, năm nào dùng test
 - Nếu bảng này có 391,265 dòng thì Gold dataset cũng sẽ có tối đa 391,265 dòng (trước khi filter)
 
@@ -149,7 +160,7 @@ hematocrit, hemoglobin, platelet, wbc, creatinine, bun, sodium, potassium, chlor
 |-----|---------|----------|
 | `stay_id_eicu` | Mã lần nhập ICU (thay cho hadm_id) | Join nội bộ eICU |
 | `hospitalid` | Mã bệnh viện | Phân tích theo bệnh viện |
-| `event_flag_mortality` | 1 = tử vong | Survival label E |
+| `event_flag_mortality` | 1 = tử vong | Survival label E (eICU external validation) |
 | `sbp_mean`, `spo2_mean`, `hr_mean`, `temperature_mean` | Sinh hiệu 24h đầu | Feature sinh hiệu |
 | `age`, `gender` | Nhân khẩu học | Feature nhân khẩu học |
 
@@ -196,7 +207,7 @@ notes_clean             331,793           84.8% ← Phần lớn có ghi chú
 eicu_harmonized        200,859           (riêng eICU, không join MIMIC)
 ```
 
-**Hệ quả cho Gold:** Khi left join từ admissions, nhiều bệnh nhân sẽ có NULL ở SBP/SpO2/HR/Temp/lab. Mô hình ML phải xử lý được missing values (XGBSE xử lý tự động, Cox PH cần impute).
+**Hệ quả cho Gold:** Khi left join từ admissions, nhiều bệnh nhân sẽ có NULL ở SBP/SpO2/HR/Temp/lab. Mô hình ML phải xử lý được missing values (XGBSE xử lý tự động, Cox PH cần impute). Gold cần giữ `index_time = dischtime` và các cột `readmission_*` / `mortality_*` để train đúng bài toán discharge-planning.
 
 ---
 
@@ -216,11 +227,17 @@ Biến đổi 6 bảng Silver thành **1 bảng duy nhất** – Gold Analytical
 # MIMIC only:
 spark-submit --driver-memory 6g --conf spark.sql.shuffle.partitions=200 src/etl/build_gold_dataset.py hdfs
 
-# MIMIC + eICU:
+# MIMIC + eICU (external validation only):
 spark-submit --driver-memory 6g --conf spark.sql.shuffle.partitions=200 src/etl/build_gold_dataset.py hdfs --include-eicu
 
-# Validate:
+# Validate default dataset:
 spark-submit src/etl/validate_gold.py hdfs
+
+# Validate dataset có suffix:
+spark-submit src/etl/validate_gold.py hdfs --dataset-name analytical_dataset_postdischarge_v2
+
+# Inspect dataset có suffix:
+spark-submit src/etl/inspect_gold.py hdfs --dataset-name analytical_dataset_postdischarge_v2
 ```
 
 **Input:**
@@ -246,7 +263,7 @@ spark-submit src/etl/validate_gold.py hdfs
 #### Bước 1: Load admissions cohort
 ```python
 df_base = spark.read.parquet("silver/admissions")
-# 391,265 rows × hadm_id, subject_id, age, gender, duration_days, event_flag_mortality, admityear
+# 391,265 rows × hadm_id, subject_id, age, gender, duration_days, index_time, readmission_time_days, readmission_event_30d, mortality_time_days, mortality_event_12m, admityear
 ```
 
 #### Bước 2: Left join vitals
@@ -318,7 +335,7 @@ df.write.mode("overwrite").partitionBy("split").option("compression", "snappy").
 | Thứ tự | Task | Script | Trạng thái |
 |--------|------|--------|-----------|
 | 1 | Gold skeleton (admissions + vitals + labs + diagnoses) | `build_gold_dataset.py` | ✅ Hoàn thành |
-| 2 | Tính `event_flag_readmission` | `silver_admissions.py` | ✅ Hoàn thành |
+| 2 | Tính `readmission_event_30d` và `mortality_event_12m` | `silver_admissions.py` | ✅ Hoàn thành |
 | 3 | Tạo `silver/note_embeddings` | `train_word2vec.py` + `note_embeddings.py` | ✅ Hoàn thành |
 | 4 | Append note embeddings vào Gold | `build_gold_dataset.py --include-notes` | ✅ Hoàn thành |
 | 5 | Union eICU vào Gold | `build_gold_dataset.py --include-eicu` | ✅ Hoàn thành |
@@ -331,8 +348,8 @@ Sau khi chạy `build_gold_dataset.py` trên production:
 ```text
 - Số dòng: 592,124 (391,265 MIMIC + 200,859 eICU)
 - Số cột: 187 (8 base + 6 vitals + 23 labs + 21 ICD chapters + 128 note embeddings + 1 split)
-- Tỷ lệ event_flag_readmission: 19.28% (MIMIC)
-- Tỷ lệ event_flag_mortality: 2.06% (MIMIC), 5.43% (eICU)
+- Tỷ lệ readmission 30 ngày: 19.28% (MIMIC)
+- Tỷ lệ mortality 12 tháng: tính theo `patients.dod` từ discharge
 - Missing rate vitals: 76.43% (chỉ ICU có monitor)
 - Missing rate labs: 63.90%
 - Không có duplicate hadm_id
@@ -352,9 +369,12 @@ hadm_id: 10575854
 subject_id: 12345
 age: 69
 gender: 1 (Male)
-duration_days: 7              ← Số ngày nằm viện (Survival T)
-event_flag_readmission: 0     ← Không tái nhập trong 30 ngày (Survival E)
-event_flag_mortality: 0       ← Không tử vong tại viện
+index_time: dischtime         ← Mốc dự đoán tại thời điểm xuất viện
+duration_days: 7              ← Số ngày nằm viện (Feature)
+readmission_time_days: 30     ← Censor at 30 days nếu không nhập viện lại
+readmission_event_30d: 0      ← Không tái nhập trong 30 ngày
+mortality_time_days: 365      ← Censor at 365 ngày nếu không tử vong
+mortality_event_12m: 0        ← Không tử vong trong 12 tháng sau xuất viện
 
 ── Vitals 24h đầu ──
 sbp_mean: 125.3 mmHg
@@ -560,7 +580,7 @@ df_val = spark.read.parquet("gold/analytical_dataset").filter(col("split") == "v
 
 ### Silver Layer – Đã sửa
 - [ ] `temp_mean` giữ nguyên Fahrenheit (hiện đang convert sang Celsius)
-- [x] Tính `event_flag_readmission` (30-day readmission) – Production: 19.28%
+- [x] Tính `readmission_event_30d` và `mortality_event_12m` theo discharge time – Production: readmission 19.28%
 - [x] Tạo `silver/note_embeddings` (Word2Vec 128-dim, vocab_size 35660)
 
 ### Gold Layer ✅

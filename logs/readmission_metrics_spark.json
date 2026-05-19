@@ -1,0 +1,15 @@
+{
+  "task": "30-day readmission (PySpark)",
+  "train_c_index": 0.7211,
+  "val_c_index": 0.6748,
+  "test_c_index": 0.6534,
+  "best_iteration": 329,
+  "train_rows": 235441,
+  "val_rows": 49738,
+  "test_rows": 46129,
+  "feature_count": 62,
+  "train_readmission_rate_pct": 18.16,
+  "val_readmission_rate_pct": 18.34,
+  "test_readmission_rate_pct": 18.74,
+  "train_time_seconds": 8.6
+}

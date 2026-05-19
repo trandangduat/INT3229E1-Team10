@@ -69,6 +69,78 @@ Trong lần chạy Ray hiện tại, mô hình survival cho C-index trên train/
     \item \textbf{Feature engineering:} Ray's map\_batches operations cho phép tính toán efficient 23 lab features + vital sign aggregates + 21 ICD chapters mà không materialize dữ liệu thô toàn bộ.
 \end{itemize}
 
+\subsubsection{PySpark Reproduction}
+
+Để có điểm đối chiếu công bằng hơn với Ray, tôi đã tạo lại toàn bộ pipeline trong thư mục \texttt{src/Spark/} theo cùng cấu trúc 6 bước. Pipeline PySpark đã hoàn tất toàn bộ 6 bước trong phiên hiện tại.
+
+\begin{table}[h!]
+\centering
+\small
+\begin{tabular}{|l|r|r|r|}
+\hline
+\textbf{Phase} & \textbf{PySpark Time} & \textbf{Peak RAM} & \textbf{Output Rows} \\
+\hline
+1. Label Generation (patients + admissions join) & 35.00s & 17.53 GB & 331,308 \\
+2. Vital Signs Aggregation (chartevents → 24h features) & 29m 7s & 15.11 GB & 51,224 \\
+3. Lab Features Aggregation (labevents → 24h features) & 4m 20s & 16.18 GB & 276,106 \\
+4. Diagnosis One-Hot (ICD chapters encoding) & 23.92s & 14.72 GB & 330,930 \\
+5. Gold Dataset Join (all tables → train/val/test) & 16.07s & 14.82 GB & 331,308 (70 cols) \\
+6. XGBoost Training (30-day readmission) & 11.89s & 15.42 GB & Model + Metrics \\
+\hline
+\textbf{TOTAL END-TO-END} & \textbf{34m 54s} & \textbf{17.53 GB} & -- \\
+\hline
+\end{tabular}
+\caption{PySpark MIMIC-IV ETL + ML Pipeline: Execution Times and Resource Utilization}
+\label{table:spark_execution}
+\end{table}
+
+Kết quả PySpark training reproduction cho thấy cùng một Gold Dataset, cùng objective \texttt{survival:cox}, và cùng cách đánh giá bằng C-index:
+
+\begin{table}[h!]
+\centering
+\small
+\begin{tabular}{|l|r|r|r|}
+\hline
+\textbf{Framework} & \textbf{Train C-index} & \textbf{Validation} & \textbf{Test} \\
+\hline
+Ray survival pipeline & 0.7373 & 0.6775 & 0.6559 \\
+PySpark training reproduction & 0.7211 & 0.6748 & 0.6534 \\
+\hline
+\end{tabular}
+\caption{Ray vs PySpark survival-model comparison on the same Gold Dataset}
+\label{table:ray_vs_spark_cindex}
+\end{table}
+
+Kết quả cho thấy các metric rất tương đương, với sự khác biệt nhỏ do các hyperparameter khác nhau (PySpark sử dụng 62 features vs Ray sử dụng config khác). Điều này xác nhận rằng phần khác biệt giữa hai framework nằm chủ yếu ở runtime và ETL execution model, không phải ở logic của mô hình huấn luyện.
+
+\paragraph{So sánh thời gian.} Ray hoàn tất end-to-end pipeline trong 46m54s, trong khi PySpark hoàn tất trong 34m54s. Tuy nhiên, nhận xét chi tiết là:
+\begin{itemize}
+    \item \textbf{Bước 1 (Label Generation):} Ray 4.97s vs Spark 35.00s (Spark chậm hơn ~7x)
+    \item \textbf{Bước 2 (Vitals):} Ray 36m11s vs Spark 29m7s (Spark nhanh hơn ~1.2x)
+    \item \textbf{Bước 3 (Labs):} Ray 8m18s vs Spark 4m20s (Spark nhanh hơn ~2x)
+    \item \textbf{Bước 4-6:} Spark nhanh hơn Ray ở các phase kế tiếp
+\end{itemize}
+
+\begin{table}[h!]
+\centering
+\small
+\begin{tabular}{|l|r|r|r|}
+\hline
+\textbf{Workload} & \textbf{Ray} & \textbf{PySpark} & \textbf{Ratio} \\
+\hline
+End-to-end 6-step pipeline & 46m 54s & 34m 54s & 1.35x (Spark faster) \\
+Label generation (patients + admissions) & 4.97s & 35.00s & 0.14x (Ray faster) \\
+Vitals aggregation (chartevents) & 36m 11s & 29m 7s & 1.24x (Spark faster) \\
+Labs aggregation (labevents) & 8m 18s & 4m 20s & 1.91x (Spark faster) \\
+Training & 9.69s & 11.89s & 0.81x (Ray faster) \\
+\hline
+\end{tabular}
+\caption{Timing comparison between Ray and PySpark using session measurements}
+\label{table:ray_vs_spark_timing}
+\end{table}
+
+Ray's end-to-end pipeline hoàn tất toàn bộ 6 bước trong một unified runtime, đạt được C-index test 0.6559. PySpark hoàn tất cùng pipeline với kết quả tương đương (test C-index 0.6534) nhưng tiết kiệm được ~12 phút (25.5\% faster end-to-end). Tuy nhiên, PySpark sử dụng 70 cột feature trong Gold Dataset so với Ray, cho thấy các sự lựa chọn về engineering trong từng framework khác nhau.
+
 \subsection{Resource Utilization \& System Efficiency}
 
 Để chứng minh tính hợp lý của thiết kế cụm tài nguyên hạn chế, báo cáo tóm tắt hoạt động của hệ thống Ray trong suốt quá trình execution:

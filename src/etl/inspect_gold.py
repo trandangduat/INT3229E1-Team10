@@ -10,6 +10,11 @@ def main():
         "env", choices=["local", "hdfs"], help="Execution environment (local or hdfs)"
     )
     parser.add_argument(
+        "--dataset-name",
+        default="analytical_dataset",
+        help="Gold dataset directory name, e.g. analytical_dataset_postdischarge_v2",
+    )
+    parser.add_argument(
         "--split",
         default=None,
         help="Filter by split (train, val, test, test_external). Default: all",
@@ -27,7 +32,7 @@ def main():
     spark = builder.getOrCreate()
     spark.sparkContext.setLogLevel("WARN")
 
-    gold_path = f"{base_path}/gold/analytical_dataset"
+    gold_path = f"{base_path}/gold/{args.dataset_name}"
     print(f"[INFO] Reading Gold dataset from: {gold_path}")
     df = spark.read.parquet(gold_path)
 
@@ -60,14 +65,17 @@ def main():
         "duration_days",
         "event_flag_mortality",
         "event_flag_readmission",
+        "readmission_time_days",
+        "mortality_time_days",
+        "mortality_time_months",
         "sbp_mean",
         "spo2_mean",
         "hr_mean",
         "temperature_mean",
-        "creatinine",
-        "sodium",
-        "wbc",
-        "hemoglobin",
+        "creatinine_mean",
+        "sodium_mean",
+        "wbc_mean",
+        "hemoglobin_mean",
     ).summary("count", "mean", "min", "25%", "50%", "75%", "max").show(truncate=False)
 
     print(f"\n{'=' * 70}")
@@ -75,8 +83,8 @@ def main():
     print(f"{'=' * 70}")
     df.groupBy("split").agg(
         count("*").alias("rows"),
-        avg(col("event_flag_mortality")).alias("mortality_rate"),
-        avg(col("event_flag_readmission")).alias("readmission_rate"),
+        avg(col("mortality_event_12m")).alias("mortality_rate"),
+        avg(col("readmission_event_30d")).alias("readmission_rate"),
         min(col("admityear")).alias("min_year"),
         max(col("admityear")).alias("max_year"),
     ).orderBy("split").show(truncate=False)

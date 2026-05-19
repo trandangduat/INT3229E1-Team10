@@ -2,7 +2,13 @@
 **Dự án:** PREDICTCARE AI - CDSS Dashboard (Team 10)
 **Vai trò:** Big Data Engineering - Distributed ETL & Feature Engineering
 **Phạm vi:** Bronze -> Silver transformation sau khi production ingestion hoàn tất
-**Trạng thái hiện tại:** Silver Layer đã hoàn tất production validation trên HDFS. Tất cả 6 Silver tables + relationship checks PASS. `event_flag_readmission` đã được bổ sung. Gold Layer đã hoàn thành production (592,124 rows × 59 columns). Sẵn sàng triển khai ML Layer.
+**Trạng thái hiện tại:** Silver Layer đã hoàn tất production validation trên HDFS. Tất cả 6 Silver tables + relationship checks PASS. Pipeline đang được điều chỉnh sang đặc tả discharge-planning mới với `index_time = dischtime`, `readmission_event_30d`, `mortality_event_12m` và các time-to-event columns tương ứng.
+
+**Cập nhật kỹ thuật mới nhất (2026-05-19):**
+*   Logic `next_admittime` đã được tính từ **toàn bộ timeline admissions** theo `subject_id` trước khi filter cohort, tránh bỏ sót readmission khi admission kế tiếp bị loại khỏi cohort discharge-planning.
+*   Cohort filter đã bổ sung loại `discharge_location` chứa `died` (ngoài `expire`/`deceased`).
+*   Mortality label 12 tháng đã hỗ trợ ca tử vong cùng ngày xuất viện (`days_to_death_after_discharge >= 0`) và ép `mortality_time_days >= 1` cho event.
+*   `validate_silver.py` đã đổi relationship checks sang chế độ fail-hard: nếu có orphan `hadm_id`, pipeline validation fail thật sự.
 
 ---
 
@@ -17,7 +23,7 @@ Khác với Bronze Layer, Silver Layer được phép thực hiện:
 *   Filter các bản ghi không hợp lệ theo rule lâm sàng.
 *   Join các bảng cần thiết để tạo entity-level dataset.
 *   Aggregate dữ liệu event-level thành admission-level hoặc patient-level features.
-*   Tạo label cho survival analysis như `duration_days`, `event_flag_readmission`, `event_flag_mortality`.
+*   Tạo label cho survival analysis theo discharge time: `index_time`, `readmission_time_days`, `readmission_event_30d`, `mortality_time_days`, `mortality_time_months`, `mortality_event_12m`.
 
 Nguyên tắc quan trọng:
 
@@ -127,8 +133,8 @@ Trạng thái triển khai:
 *   **Đã chạy production trên HDFS thành công.**
 *   **Production metrics: row count `391,265`, distinct `hadm_id` `391,265`, null subject_id/hadm_id/admittime/dischtime/admityear = `0`.**
 *   **`validate_silver.py` PASS: `_SUCCESS`, required columns, required non-null.**
-*   **Đã bổ sung `event_flag_readmission` (30-day readmission) bằng Window function `lag()` trên cùng `subject_id`.**
-*   **Production readmission rate: `19.28%` (75,450 / 391,265 admissions).**
+*   **Đã bổ sung `readmission_event_30d` và `readmission_time_days` từ lần nhập viện kế tiếp của cùng `subject_id` sau `dischtime`.**
+*   **Đã bổ sung `mortality_event_12m`, `mortality_time_days`, `mortality_time_months` từ `patients.dod` tính từ `dischtime`.**
 
 Lệnh chạy local qua Docker:
 
@@ -159,9 +165,12 @@ Transformation logic:
     *   `dischtime` -> timestamp
     *   `deathtime` -> timestamp nếu có
 *   Join `admissions` với `patients` theo `subject_id`.
-*   Tính `duration_days = datediff(dischtime, admittime)`.
+*   Tính `duration_days = datediff(dischtime, admittime)` và giữ như feature.
+*   Tính `index_time = dischtime` làm mốc dự đoán.
 *   Tính `admityear = year(admittime)` để partition.
-*   Tính `event_flag_mortality` từ `hospital_expire_flag`.
+*   Tính `next_admittime` từ timeline admissions đầy đủ của từng `subject_id`, sau đó join vào cohort discharge-planning để tạo label readmission.
+*   Tính `event_flag_readmission` / `readmission_time_days` theo `hours_to_readmission` (không bỏ sót same-day readmission).
+*   Tính `event_flag_mortality` / `mortality_time_days` / `mortality_time_months` từ `patients.dod` trong 12 tháng sau xuất viện, bao gồm same-day mortality post-discharge.
 *   Tính tuổi tại thời điểm nhập viện bằng `anchor_age`, `anchor_year`, `admittime`.
 *   Filter theo specification:
     *   Adult patients: `age >= 18`.
@@ -184,8 +193,8 @@ Validation metrics:
 *   Số dòng input admissions.
 *   Số dòng sau join patients.
 *   Số dòng sau filter adult.
-*   Tỉ lệ mortality.
-*   Min/max/avg `duration_days`.
+*   Tỉ lệ readmission 30 ngày và mortality 12 tháng.
+*   Min/max/avg `duration_days` và các time-to-event columns.
 *   Phân phối theo `admityear`.
 
 ---
@@ -581,7 +590,7 @@ Transformation logic dự kiến:
 *   Remove stopwords thường và medical stopwords.
 *   Train Word2Vec CBOW với `vectorSize=128`.
 *   Sinh document embedding theo `hadm_id`.
-
+x`
 Output:
 
 ```text

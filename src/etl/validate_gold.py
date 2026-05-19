@@ -19,9 +19,21 @@ GOLD_REQUIRED_COLUMNS = [
     "subject_id",
     "age",
     "gender",
+    "admission_type",
+    "insurance",
+    "marital_status",
+    "race",
+    "discharge_location",
+    "discharge_location_enc",
+    "index_time",
     "duration_days",
     "event_flag_mortality",
     "event_flag_readmission",
+    "readmission_event_30d",
+    "mortality_event_12m",
+    "readmission_time_days",
+    "mortality_time_days",
+    "mortality_time_months",
     "admityear",
     "split",
 ]
@@ -148,8 +160,8 @@ GOLD_FEATURE_GROUPS = {
 }
 
 
-def validate_gold(spark, base_path):
-    gold_path = f"{base_path}/gold/analytical_dataset"
+def validate_gold(spark, base_path, dataset_name):
+    gold_path = f"{base_path}/gold/{dataset_name}"
     print(f"[INFO] Reading Gold dataset from: {gold_path}")
 
     df = spark.read.parquet(gold_path)
@@ -195,11 +207,35 @@ def validate_gold(spark, base_path):
     print("[INFO] Event rates by split:")
     df.groupBy("split").agg(
         count("*").alias("rows"),
-        avg(col("event_flag_mortality")).alias("mortality_rate"),
-        spark_sum(col("event_flag_mortality")).alias("mortality_count"),
-        avg(col("event_flag_readmission")).alias("readmission_rate"),
-        spark_sum(col("event_flag_readmission")).alias("readmission_count"),
+        avg(col("mortality_event_12m")).alias("mortality_rate"),
+        spark_sum(col("mortality_event_12m")).alias("mortality_count"),
+        avg(col("readmission_event_30d")).alias("readmission_rate"),
+        spark_sum(col("readmission_event_30d")).alias("readmission_count"),
     ).orderBy("split").show(truncate=False)
+
+    print("[INFO] Label range validation:")
+    readm_bad_event = df.filter(
+        (col("readmission_event_30d") == 1)
+        & ~((col("readmission_time_days") >= 1) & (col("readmission_time_days") <= 30))
+    ).count()
+    readm_bad_nonevent = df.filter(
+        (col("readmission_event_30d") == 0) & (col("readmission_time_days") != 30)
+    ).count()
+    mort_bad_event = df.filter(
+        (col("mortality_event_12m") == 1)
+        & ~((col("mortality_time_days") >= 1) & (col("mortality_time_days") <= 365))
+    ).count()
+    mort_bad_nonevent = df.filter(
+        (col("mortality_event_12m") == 0) & (col("mortality_time_days") != 365)
+    ).count()
+    print(f"[METRIC] Invalid readmission event rows: {readm_bad_event}")
+    print(f"[METRIC] Invalid readmission non-event rows: {readm_bad_nonevent}")
+    print(f"[METRIC] Invalid mortality event rows: {mort_bad_event}")
+    print(f"[METRIC] Invalid mortality non-event rows: {mort_bad_nonevent}")
+    if any([readm_bad_event, readm_bad_nonevent, mort_bad_event, mort_bad_nonevent]):
+        print("[FAIL] Label range validation failed")
+        return False
+    print("[PASS] Label range validation")
 
     print("[INFO] Temporal split validation:")
     for split_name in ["train", "val", "test"]:
@@ -249,6 +285,11 @@ def main():
     parser.add_argument(
         "env", choices=["local", "hdfs"], help="Execution environment (local or hdfs)"
     )
+    parser.add_argument(
+        "--dataset-name",
+        default="analytical_dataset",
+        help="Gold dataset directory name, e.g. analytical_dataset_postdischarge_v2",
+    )
     args = parser.parse_args()
 
     base_path = "data" if args.env == "local" else "hdfs://master10:9000/user/dis/data"
@@ -261,7 +302,7 @@ def main():
     print(f"[INFO] Validating Gold Dataset in {args.env.upper()} mode")
     print(f"[INFO] Base path: {base_path}")
 
-    passed = validate_gold(spark, base_path)
+    passed = validate_gold(spark, base_path, args.dataset_name)
 
     spark.stop()
     if not passed:

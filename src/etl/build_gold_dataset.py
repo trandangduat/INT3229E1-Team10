@@ -143,6 +143,25 @@ def map_icd_to_chapter(icd_code, icd_version):
     return None
 
 
+def encode_discharge_location(discharge_location):
+    if discharge_location is None:
+        return None
+    location = str(discharge_location).strip().lower()
+    if not location:
+        return None
+    if "home health" in location or location in {"hhc", "home health care"}:
+        return 1
+    if "skilled nursing" in location or location == "snf":
+        return 2
+    if "rehab" in location:
+        return 3
+    if "expire" in location or "deceased" in location:
+        return 4
+    if "home" in location:
+        return 0
+    return None
+
+
 def has_parquet_files(spark, path):
     hadoop_conf = spark.sparkContext._jsc.hadoopConfiguration()
     hadoop_path = spark.sparkContext._jvm.org.apache.hadoop.fs.Path(path)
@@ -202,6 +221,10 @@ def main():
     print(f"[INFO] Include eICU: {args.include_eicu}")
     print(f"[INFO] Include notes: {args.include_notes}")
     print(f"[INFO] Output suffix: '{args.output_suffix}'")
+    if args.include_eicu:
+        print(
+            "[WARN] --include-eicu is intended for external validation only; do not use it for 12-month mortality survival training unless follow-up labels are harmonized."
+        )
 
     builder = SparkSession.builder.appName("GoldLayer_BuildDataset")
     if args.env == "local":
@@ -224,9 +247,20 @@ def main():
         col("subject_id").cast("long").alias("subject_id"),
         col("age").cast("int").alias("age"),
         col("gender"),
+        col("admission_type"),
+        col("insurance"),
+        col("marital_status"),
+        col("race"),
+        col("discharge_location"),
+        col("index_time"),
         col("duration_days").cast("int").alias("duration_days"),
-        col("event_flag_mortality").cast("int").alias("event_flag_mortality"),
         col("event_flag_readmission").cast("int").alias("event_flag_readmission"),
+        col("event_flag_mortality").cast("int").alias("event_flag_mortality"),
+        col("readmission_event_30d").cast("int").alias("readmission_event_30d"),
+        col("readmission_time_days").cast("int").alias("readmission_time_days"),
+        col("mortality_time_days").cast("int").alias("mortality_time_days"),
+        col("mortality_time_months").cast("double").alias("mortality_time_months"),
+        col("mortality_event_12m").cast("int").alias("mortality_event_12m"),
         col("admittime"),
         col("dischtime"),
         col("admityear").cast("int").alias("admityear"),
@@ -235,6 +269,10 @@ def main():
     print(f"[METRIC] Base admissions count: {base_count}")
 
     df = df_base
+    discharge_location_enc_udf = udf(encode_discharge_location, IntegerType())
+    df = df.withColumn(
+        "discharge_location_enc", discharge_location_enc_udf(col("discharge_location"))
+    )
 
     # ──────────────────────────────────────────────
     # STEP 2: Left join vitals from chartevents_agg
@@ -495,9 +533,19 @@ def main():
                 lit(None).cast("long").alias("subject_id"),
                 col("age").cast("int").alias("age"),
                 col("gender"),
+                lit(None).cast("string").alias("admission_type"),
+                lit(None).cast("string").alias("insurance"),
+                lit(None).cast("string").alias("marital_status"),
+                lit(None).cast("string").alias("race"),
+                lit(None).cast("string").alias("discharge_location"),
+                lit(None).cast("timestamp").alias("index_time"),
                 lit(None).cast("int").alias("duration_days"),
                 col("event_flag_mortality").cast("int").alias("event_flag_mortality"),
                 lit(0).cast("int").alias("event_flag_readmission"),
+                lit(None).cast("int").alias("readmission_time_days"),
+                lit(None).cast("int").alias("mortality_time_days"),
+                lit(None).cast("double").alias("mortality_time_months"),
+                lit(None).cast("int").alias("mortality_event_12m"),
                 lit(None).cast("timestamp").alias("admittime"),
                 lit(None).cast("timestamp").alias("dischtime"),
                 lit(None).cast("int").alias("admityear"),

@@ -66,7 +66,7 @@ Built the final analytical dataset joining all Silver outputs:
 - Labs 24h: 23 lab features (creatinine, sodium, wbc, hemoglobin, etc.)
 - Diagnoses: one-hot ICD-10 chapters (top 50)
 - Notes: Word2Vec 128-dim document embeddings
-- Survival labels: duration_days, event_flag_readmission, event_flag_mortality
+- Survival labels: index_time, readmission_time_days, readmission_event_30d, mortality_time_days, mortality_time_months, mortality_event_12m
 
 ### 1.4 Documentation & Validation
 
@@ -120,6 +120,7 @@ Week 14-15: Integration testing, dashboard demo, final report
 | `validate_silver.py` Wrong FS error on HDFS | Fixed by using `path.getFileSystem(hadoop_conf)` instead of `FileSystem.get(hadoop_conf)` |
 | `silver_diagnoses.py` orphan hadm_id (39,819 rows) | Added inner join with `silver/admissions` to filter diagnoses by cohort |
 | MIMIC-IV temperature itemid not found in local sample | Ran inspection on full HDFS `d_items` (4,014 items) and identified 223761 (°F), 223762 (°C) |
+| Post-discharge label consistency gaps in admissions flow | Fixed by computing `next_admittime` from full admissions timeline before cohort filter, adding `discharge_location contains('died')` exclusion, enabling same-day mortality handling, and enforcing fail-hard orphan checks in `validate_silver.py` |
 
 ### 3.2 Current Blockers
 
@@ -127,7 +128,7 @@ Week 14-15: Integration testing, dashboard demo, final report
 |---------|--------|------------|
 | `spark.ml` requires `numpy` on HDFS VM | Cannot use Spark NLP pipeline (`DocumentAssembler`, `Tokenizer`, `StopWordsCleaner`) for notes_clean | Used PySpark SQL functions as workaround; Word2Vec training will use PySpark MLlib `Word2Vec` instead of Spark NLP |
 | Gold dataset schema deviation from spec | `temp_mean` currently in Celsius (converted from Fahrenheit); spec requires Fahrenheit | Plan to fix `silver_vitals_mimic.py` to keep Fahrenheit, re-run Silver vitals, rebuild Gold |
-| `event_flag_readmission` not yet implemented | Spec requires 30-day readmission flag; only mortality flag exists | Need to compute next admission within 30 days from admissions table; requires self-join logic |
+| Discharge-based labels need reconciliation | ✅ Resolved in ETL/validation code | Labels now use `index_time = dischtime`, with explicit `readmission_event_30d` and `mortality_event_12m` checks |
 
 ### 3.3 Technical Risks
 

@@ -3,14 +3,20 @@ import argparse
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     avg,
+    ceil,
     col,
     count,
     datediff,
-    lag,
+    greatest,
+    lead,
+    lit,
+    lower,
     max,
     min,
     sum,
+    to_date,
     to_timestamp,
+    unix_timestamp,
     when,
     year,
 )
@@ -57,7 +63,11 @@ def main():
         to_timestamp("admittime").alias("admittime"),
         to_timestamp("dischtime").alias("dischtime"),
         to_timestamp("deathtime").alias("deathtime"),
-        col("hospital_expire_flag").cast("int").alias("event_flag_mortality"),
+        col("admission_type"),
+        col("insurance"),
+        col("marital_status"),
+        col("race"),
+        col("discharge_location"),
     )
 
     df_pat = df_pat_raw.select(
@@ -65,6 +75,7 @@ def main():
         col("gender"),
         col("anchor_age").cast("int"),
         col("anchor_year").cast("int"),
+        to_date("dod").alias("dod"),
     )
 
     invalid_adm_count = df_adm.filter(
@@ -91,9 +102,21 @@ def main():
         df_joined.withColumn("admityear", year(col("admittime")))
         .withColumn("duration_days", datediff(col("dischtime"), col("admittime")))
         .withColumn("age", col("anchor_age") + (col("admityear") - col("anchor_year")))
+        .withColumn("index_time", col("dischtime"))
     )
 
-    print("[INFO] Applying clinical filters (age >= 18, duration_days >= 1)...")
+    patient_window = Window.partitionBy("subject_id").orderBy("admittime", "hadm_id")
+    df_readmission_lookup = (
+        df_transformed.filter(
+            col("subject_id").isNotNull()
+            & col("hadm_id").isNotNull()
+            & col("admittime").isNotNull()
+        )
+        .withColumn("next_admittime", lead("admittime", 1).over(patient_window))
+        .select("hadm_id", "next_admittime")
+    )
+
+    print("[INFO] Applying post-discharge cohort filters...")
     df_filtered = df_transformed.filter(
         col("subject_id").isNotNull()
         & col("hadm_id").isNotNull()
@@ -102,28 +125,73 @@ def main():
         & col("admityear").isNotNull()
         & (col("age") >= 18)
         & (col("duration_days") >= 1)
+        & col("deathtime").isNull()
+        & (
+            col("discharge_location").isNull()
+            | (
+                ~lower(col("discharge_location")).contains("expire")
+                & ~lower(col("discharge_location")).contains("deceased")
+                & ~lower(col("discharge_location")).contains("died")
+            )
+        )
     )
 
+    df_filtered = df_filtered.join(df_readmission_lookup, on="hadm_id", how="left")
+
     print("[INFO] Computing 30-day readmission flag...")
-    patient_window = Window.partitionBy("subject_id").orderBy("admittime")
     df_with_next = (
         df_filtered.withColumn(
-            "next_admittime", lag("admittime", -1).over(patient_window)
-        )
-        .withColumn(
-            "days_to_readmission",
-            datediff(col("next_admittime"), col("dischtime")),
+            "hours_to_readmission",
+            (unix_timestamp(col("next_admittime")) - unix_timestamp(col("dischtime")))
+            / 3600.0,
         )
         .withColumn(
             "event_flag_readmission",
             when(
-                col("days_to_readmission").isNotNull()
-                & (col("days_to_readmission") >= 0)
-                & (col("days_to_readmission") <= 30),
+                col("hours_to_readmission").isNotNull()
+                & (col("hours_to_readmission") > 0)
+                & (col("hours_to_readmission") <= 30 * 24),
                 1,
             ).otherwise(0),
         )
-        .drop("next_admittime", "days_to_readmission")
+        .withColumn(
+            "readmission_time_days",
+            when(
+                col("event_flag_readmission") == 1,
+                greatest(ceil(col("hours_to_readmission") / 24.0), lit(1)),
+            ).otherwise(30),
+        )
+        .withColumn(
+            "days_to_death_after_discharge",
+            datediff(col("dod"), col("dischtime")),
+        )
+        .withColumn(
+            "event_flag_mortality",
+            when(
+                col("days_to_death_after_discharge").isNotNull()
+                & (col("days_to_death_after_discharge") >= 0)
+                & (col("days_to_death_after_discharge") <= 365),
+                1,
+            ).otherwise(0),
+        )
+        .withColumn(
+            "mortality_time_days",
+            when(
+                col("event_flag_mortality") == 1,
+                greatest(col("days_to_death_after_discharge"), lit(1)),
+            ).otherwise(365),
+        )
+        .withColumn(
+            "mortality_time_months",
+            col("mortality_time_days") / 30.4375,
+        )
+        .withColumn("readmission_event_30d", col("event_flag_readmission"))
+        .withColumn("mortality_event_12m", col("event_flag_mortality"))
+        .drop(
+            "next_admittime",
+            "hours_to_readmission",
+            "days_to_death_after_discharge",
+        )
     )
 
     df_silver = df_with_next
@@ -134,7 +202,7 @@ def main():
     print("[INFO] --- VALIDATION METRICS ---")
     avg_mort = df_silver.agg(avg(col("event_flag_mortality"))).collect()[0][0]
     mortality_rate = (avg_mort or 0.0) * 100
-    print(f"[METRIC] Mortality Rate: {mortality_rate:.2f}%")
+    print(f"[METRIC] 12-month Mortality Rate: {mortality_rate:.2f}%")
 
     avg_readm = df_silver.agg(avg(col("event_flag_readmission"))).collect()[0][0]
     readmission_rate = (avg_readm or 0.0) * 100
@@ -152,12 +220,24 @@ def main():
 
     output_quality = df_silver.agg(
         count("*").alias("rows"),
+        sum(col("event_flag_readmission").isNull().cast("int")).alias(
+            "missing_readmission"
+        ),
         sum(col("event_flag_mortality").isNull().cast("int")).alias(
             "missing_mortality"
         ),
+        sum(col("readmission_time_days").isNull().cast("int")).alias(
+            "missing_readmission_time"
+        ),
+        sum(col("mortality_time_days").isNull().cast("int")).alias(
+            "missing_mortality_time"
+        ),
     ).collect()[0]
     print(
-        f"[METRIC] Missing mortality flags: {output_quality['missing_mortality']} / {output_quality['rows']}"
+        f"[METRIC] Missing labels: readmission {output_quality['missing_readmission']} / {output_quality['rows']}, mortality {output_quality['missing_mortality']} / {output_quality['rows']}"
+    )
+    print(
+        f"[METRIC] Missing label times: readmission {output_quality['missing_readmission_time']} / {output_quality['rows']}, mortality {output_quality['missing_mortality_time']} / {output_quality['rows']}"
     )
 
     print("[METRIC] Distribution by admityear (Top 5):")
