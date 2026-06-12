@@ -1,0 +1,100 @@
+diagnosisid,patientunitstayid,activeupondischarge,diagnosisoffset,diagnosisstring,icd9code,diagnosispriority
+4222318,141168,False,72,cardiovascular|chest pain / ASHD|coronary artery disease|known,"414.00, I25.10",Other
+3370568,141168,True,118,cardiovascular|ventricular disorders|cardiomyopathy,"",Other
+4160941,141168,False,72,pulmonary|disorders of the airways|COPD,"491.20, J44.9",Other
+4103261,141168,True,118,pulmonary|disorders of the airways|COPD,"491.20, J44.9",Other
+3545241,141168,True,118,cardiovascular|ventricular disorders|congestive heart failure,"428.0, I50.9",Other
+3820204,141168,True,118,cardiovascular|arrhythmias|atrial fibrillation|with hemodynamic compromise,"427.31, I48.0",Primary
+3656305,141168,True,118,renal|disorder of kidney|chronic kidney disease,"585.9, N18.9",Other
+3955157,141168,True,118,cardiovascular|chest pain / ASHD|coronary artery disease|known,"414.00, I25.10",Other
+3827059,141168,False,72,cardiovascular|ventricular disorders|congestive heart failure,"428.0, I50.9",Other
+3743877,141168,False,72,cardiovascular|ventricular disorders|cardiomyopathy,"",Other
+3973447,141168,False,72,renal|disorder of kidney|chronic kidney disease,"585.9, N18.9",Other
+3695171,141168,False,72,cardiovascular|arrhythmias|atrial fibrillation|with hemodynamic compromise,"427.31, I48.0",Primary
+4100620,141203,True,1141,"infectious diseases|skin, bone and joint infections|wound infection","",Other
+3455713,141203,False,74,pulmonary|respiratory failure|acute respiratory distress,518.82,Other
+3663517,141203,True,1141,endocrine|glucose metabolism|diabetes mellitus,"",Other
+3384190,141203,True,1141,neurologic|altered mental status / pain|dementia,"294.9, F03",Other
+4167821,141203,True,1141,"infectious diseases|skin, bone and joint infections|infected pressure ulcer","",Other
+3601675,141203,False,74,neurologic|seizures|seizures,"345.90, R56.9",Other
+3722929,141203,True,1141,neurologic|seizures|seizures,"345.90, R56.9",Other
+3712299,141203,False,74,neurologic|altered mental status / pain|dementia,"294.9, F03",Other
+3890140,141203,True,1141,cardiovascular|chest pain / ASHD|coronary artery disease,"",Major
+3621307,141203,False,74,hematology|coagulation disorders|coagulopathy,"286.9, D68.9",Other
+3774762,141203,True,1141,hematology|coagulation disorders|coagulopathy,"286.9, D68.9",Other
+3851425,141203,False,74,"infectious diseases|skin, bone and joint infections|infected pressure ulcer","",Other
+3656597,141203,True,1141,pulmonary|respiratory failure|acute respiratory distress,518.82,Other
+3627464,141203,False,74,cardiovascular|chest pain / ASHD|coronary artery disease,"",Major
+3679502,141203,True,1141,infectious diseases|GI infections|diarrhea due to infection,"",Other
+3872558,141203,False,74,endocrine|glucose metabolism|diabetes mellitus,"",Other
+3914738,141203,False,74,"infectious diseases|skin, bone and joint infections|wound infection","",Other
+3803853,141227,True,18,cardiovascular|shock / hypotension|sepsis,"038.9, A41.9",Primary
+3578311,141229,True,15,cardiovascular|arrhythmias|atrial fibrillation,"427.31, I48.0",Other
+3439339,141229,False,9,cardiovascular|ventricular disorders|acute pulmonary edema,"428.1, I50.1",Primary
+4133406,141229,True,15,cardiovascular|ventricular disorders|congestive heart failure,"428.0, I50.9",Other
+3968382,141229,True,15,neurologic|altered mental status / pain|change in mental status,"780.09, R41.82",Major
+3957504,141229,True,15,cardiovascular|ventricular disorders|acute pulmonary edema,"428.1, I50.1",Primary
+3676049,141266,True,96,gastrointestinal|GI bleeding / PUD|upper GI bleeding|varices,"456.0, I85.01",Other
+4269128,141266,True,96,renal|disorder of kidney|acute renal failure,"584.9, N17.9",Other
+3999617,141266,True,96,infectious diseases|GU infections|lower urinary tract infection,"595.9, N30.9",Other
+4220594,141266,True,96,cardiovascular|ventricular disorders|cardiomyopathy|dilated|ischemic,"425.8, I25.5",Other
+3415693,141266,True,96,pulmonary|disorders of the airways|obstructive sleep apnea,"780.57, G47.33",Other
+4197411,141266,True,96,endocrine|glucose metabolism|diabetes mellitus,"",Other
+3866259,141266,True,96,gastrointestinal|GI bleeding / PUD|peptic ulcer disease|gastric,"531.90, K25.9",Other
+4214216,141266,True,96,gastrointestinal|GI bleeding / PUD|upper GI bleeding|esophageal,"530.82, K22.8",Other
+3588591,141266,True,96,cardiovascular|chest pain / ASHD|acute coronary syndrome|acute myocardial infarction (no ST elevation),"410.71, I21.4",Primary
+3835160,141266,True,96,renal|disorder of kidney|chronic kidney disease|Stage 3 (GFR 30-59),"585.3, N18.3",Other
+3561267,141266,True,96,cardiovascular|ventricular disorders|acute pulmonary edema,"428.1, I50.1",Other
+4182785,141284,True,1180,pulmonary|pleural disorders|pleural effusion,"511.9, J91.8",Other
+3982029,141284,False,42,hematology|bleeding and red blood cell disorders|anemia,"",Primary
+3858940,141284,True,1180,hematology|bleeding and red blood cell disorders|anemia,"",Primary
+3504123,141284,True,1180,pulmonary|pulmonary infections|pneumonia,"486, J18.9",Other
+4026944,141284,False,42,pulmonary|pleural disorders|pleural effusion,"511.9, J91.8",Other
+3449586,141288,False,899,cardiovascular|chest pain / ASHD|acute coronary syndrome,"",Major
+4186947,141288,False,19,pulmonary|disorders of the airways|COPD,"491.20, J44.9",Other
+3884122,141288,False,575,cardiovascular|chest pain / ASHD|acute coronary syndrome,"",Major
+3486058,141288,False,575,cardiovascular|shock / hypotension|sepsis,"038.9, A41.9",Primary
+3835354,141288,False,415,pulmonary|disorders of the airways|COPD,"491.20, J44.9",Other
+3650626,141288,False,575,pulmonary|disorders of the airways|COPD,"491.20, J44.9",Other
+4275659,141288,False,899,pulmonary|disorders of the airways|COPD,"491.20, J44.9",Other
+3831497,141288,False,19,cardiovascular|shock / hypotension|sepsis,"038.9, A41.9",Primary
+4253515,141288,False,575,pulmonary|pulmonary infections|pneumonia|hospital acquired (not ventilator-associated),"486, J18.9",Major
+3866266,141288,False,415,pulmonary|pulmonary infections|pneumonia|hospital acquired (not ventilator-associated),"486, J18.9",Major
+3977617,141288,False,899,pulmonary|pulmonary infections|pneumonia|hospital acquired (not ventilator-associated),"486, J18.9",Major
+4085756,141288,False,19,pulmonary|pulmonary infections|pneumonia,"486, J18.9",Major
+4182145,141288,False,575,pulmonary|pulmonary infections|pneumonia|community-acquired,"486, J18.9",Major
+3814467,141288,False,415,cardiovascular|shock / hypotension|sepsis,"038.9, A41.9",Primary
+4136493,141288,False,899,pulmonary|pulmonary infections|pneumonia|community-acquired,"486, J18.9",Major
+3549703,141288,False,415,pulmonary|pulmonary infections|pneumonia|community-acquired,"486, J18.9",Major
+4094182,141288,False,899,pulmonary|respiratory failure|acute respiratory distress,518.82,Major
+4091397,141288,False,899,cardiovascular|shock / hypotension|sepsis,"038.9, A41.9",Primary
+3456246,141289,True,13,pulmonary|pleural disorders|pneumothorax|spontaneous,"512.8, J93.1",Primary
+4037453,141289,True,13,pulmonary|disorders of the airways|COPD,"491.20, J44.9",Other
+3387397,141289,True,13,pulmonary|pulmonary infections|pneumonia|community-acquired,"486, J18.9",Major
+3700365,141289,True,13,pulmonary|respiratory failure|acute respiratory distress,518.82,Major
+3415445,141289,True,13,pulmonary|pulmonary infections|pneumonia|hospital acquired (not ventilator-associated),"486, J18.9",Major
+3385266,141289,True,13,cardiovascular|shock / hypotension|sepsis,"038.9, A41.9",Major
+3377209,141289,True,13,cardiovascular|chest pain / ASHD|acute coronary syndrome,"",Major
+3772443,141296,False,34,renal|disorder of kidney|ESRD (end stage renal disease),"585.6, N18.6",Other
+4194442,141296,False,34,pulmonary|respiratory failure|hypoxemia,"799.02, J96.91",Other
+4265907,141296,False,34,cardiovascular|arrhythmias|atrial fibrillation,"427.31, I48.0",Other
+4278161,141296,False,34,pulmonary|respiratory failure|acute respiratory distress,518.82,Other
+4000975,141297,True,25,pulmonary|pulmonary infections|pneumonia,"486, J18.9",Major
+4230856,141297,True,25,cardiovascular|arrhythmias|atrial fibrillation,"427.31, I48.0",Other
+3774048,141297,True,25,pulmonary|respiratory failure|acute respiratory distress,518.82,Major
+4242539,141297,True,25,cardiovascular|shock / hypotension|sepsis,"038.9, A41.9",Primary
+3695159,141297,True,25,pulmonary|respiratory failure|hypoxemia,"799.02, J96.91",Major
+4052759,141297,True,25,renal|disorder of kidney|ESRD (end stage renal disease),"585.6, N18.6",Other
+3621447,141304,False,23,pulmonary|respiratory failure|acute respiratory distress,518.82,Other
+3370481,141304,True,260,pulmonary|respiratory failure|acute respiratory failure,"518.81, J96.00",Major
+3893006,141304,False,23,cardiovascular|shock / hypotension|sepsis,"038.9, A41.9",Primary
+4130581,141304,True,260,cardiovascular|shock / hypotension|sepsis,"038.9, A41.9",Primary
+3681834,141304,True,260,pulmonary|disorders of the airways|COPD,"491.20, J44.9",Other
+3449334,141304,True,260,cardiovascular|shock / hypotension|hypotension,"458.9, I95.9",Other
+3808501,141304,True,260,hematology|bleeding and red blood cell disorders|anemia,"",Other
+3539282,141304,True,260,renal|disorder of kidney|acute renal failure,"584.9, N17.9",Other
+3789019,141304,True,260,pulmonary|pulmonary infections|pneumonia|aspiration,"507.0, J69.0",Other
+3577101,141304,True,260,pulmonary|respiratory failure|hypoxemia,"799.02, J96.91",Other
+4196860,141313,False,157,cardiovascular|diseases of the aorta|aortic aneurysm|leaking,"441.9, I71.9",Primary
+3551036,141313,False,157,cardiovascular|diseases of the aorta|aortic aneurysm|abdominal,"441.4, I71.4",Primary
+4062967,141314,False,28,cardiovascular|shock / hypotension|hypovolemic shock|hemorrhagic,"785.59, R57.1, R58",Major

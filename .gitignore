@@ -1,7 +1,6 @@
 data/*
 !data/raw/
 !data/processed/
-data/raw/*
 !data/raw/.gitkeep
 data/processed/*
 !data/processed/.gitkeep
@@ -12,3 +11,4 @@ __pycache__/
 *.csv
 .ipynb_checkpoints/
 physionet.org
+!data/raw/*.csv
